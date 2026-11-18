@@ -4,15 +4,20 @@ import assert from 'node:assert/strict';
 import { io as connectClient } from 'socket.io-client';
 import { createAppServer } from '../src/app.js';
 
-test('CampLink API and Socket.IO connection', async (t) => {
-    const { httpServer, io } = createAppServer();
+test('API health and unauthorized access', async (t) => {
+    const { httpServer, io, store } = createAppServer({
+        databasePath: ':memory:',
+    });
 
     await new Promise((resolve, reject) => {
         httpServer.once('error', reject);
         httpServer.listen(0, '127.0.0.1', resolve);
     });
 
-    t.after(() => new Promise((resolve) => io.close(resolve)));
+    t.after(async () => {
+        await new Promise((resolve) => io.close(resolve));
+        store.close();
+    });
 
     const port = httpServer.address().port;
     const url = `http://127.0.0.1:${port}`;
@@ -24,6 +29,9 @@ test('CampLink API and Socket.IO connection', async (t) => {
     assert.equal(health.ok, true);
     assert.equal(health.service, 'camplink-api');
 
+    const usersResponse = await fetch(`${url}/api/users`);
+    assert.equal(usersResponse.status, 401);
+
     const client = connectClient(url, {
         autoConnect: false,
         transports: ['websocket'],
@@ -33,24 +41,23 @@ test('CampLink API and Socket.IO connection', async (t) => {
 
     t.after(() => client.disconnect());
 
-    const hello = await new Promise((resolve, reject) => {
+    const error = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            reject(new Error('Socket connection timed out'));
+            reject(new Error('Unauthorized test timed out'));
         }, 3000);
 
-        client.once('system:hello', (data) => {
+        client.once('connect_error', (err) => {
             clearTimeout(timeout);
-            resolve(data);
+            resolve(err);
         });
 
-        client.once('connect_error', (error) => {
+        client.once('connect', () => {
             clearTimeout(timeout);
-            reject(error);
+            reject(new Error('Unauthorized connection accepted'));
         });
 
         client.connect();
     });
 
-    assert.equal(hello.ready, true);
-    assert.equal(hello.protocolVersion, 1);
+    assert.match(error.message, /Unauthorized/);
 });

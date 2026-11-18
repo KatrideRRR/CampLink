@@ -6,8 +6,8 @@ export function connectToServer(
 ) {
     const socket = io({
         path: '/socket.io',
-        autoConnect: false,
         transports: ['websocket', 'polling'],
+        withCredentials: true,
         reconnection: true,
         reconnectionDelay: 1000,
     });
@@ -24,9 +24,5 @@ export function connectToServer(
         onStatusChange(false);
     });
 
-    socket.connect();
-
-    return () => {
-        socket.disconnect();
-    };
+    return socket;
 }

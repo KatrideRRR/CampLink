@@ -2,10 +2,75 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
+import { createStore } from './store.js';
 
-export function createAppServer() {
+const COOKIE_NAME = 'camplink_session';
+const SESSION_AGE = 7 * 24 * 60 * 60 * 1000;
+
+function readSessionToken(header = '') {
+    const match = header.match(
+        /(?:^|;\s*)camplink_session=([a-f0-9]{64})(?:;|$)/
+    );
+
+    return match?.[1] ?? null;
+}
+
+const cookieOptions = {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+};
+
+export function createAppServer(options = {}) {
+    const store = createStore(options.databasePath);
     const app = express();
+
     app.disable('x-powered-by');
+    app.use(express.json({ limit: '8kb' }));
+
+    const httpServer = createServer(app);
+
+    const allowedOrigins = (
+        process.env.CAMPLINK_ALLOWED_ORIGINS ||
+        'http://localhost:5173,http://127.0.0.1:5173'
+    )
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+
+    const io = new Server(httpServer, {
+        transports: ['websocket', 'polling'],
+        cors: {
+            origin: allowedOrigins,
+            credentials: true,
+        },
+        allowRequest: (request, callback) => {
+            const origin = request.headers.origin;
+
+            callback(
+                null,
+                !origin || allowedOrigins.includes(origin)
+            );
+        },
+    });
+
+    const loginAttempts = new Map();
+
+    function requireAuth(req, res, next) {
+        const token = readSessionToken(req.headers.cookie);
+        const user = store.getSessionUser(token);
+
+        if (!user) {
+            return res.status(401).json({
+                error: 'Unauthorized',
+            });
+        }
+
+        req.user = user;
+        req.sessionToken = token;
+        next();
+    }
 
     app.get('/api/health', (_req, res) => {
         res.json({
@@ -15,25 +80,200 @@ export function createAppServer() {
         });
     });
 
-    const httpServer = createServer(app);
+    app.post('/api/auth/login', (req, res) => {
+        const username =
+            typeof req.body?.username === 'string'
+                ? req.body.username.trim().toLowerCase()
+                : '';
 
-    const io = new Server(httpServer, {
-        transports: ['websocket', 'polling'],
-        cors: {
-            origin: [
-                'http://localhost:5173',
-                'http://127.0.0.1:5173',
-            ],
-            methods: ['GET', 'POST'],
-        },
+        const password = req.body?.password;
+        const key = `${req.ip}:${username}`;
+
+        const now = Date.now();
+        const previous = loginAttempts.get(key);
+
+        if (previous && now - previous.first > 900000) {
+            loginAttempts.delete(key);
+        }
+
+        const attempt = loginAttempts.get(key);
+
+        if (attempt?.count >= 8) {
+            return res.status(429).json({
+                error: 'Too many login attempts',
+            });
+        }
+
+        const user = store.verifyCredentials(
+            username,
+            password
+        );
+
+        if (!user) {
+            const current = loginAttempts.get(key) || {
+                count: 0,
+                first: now,
+            };
+
+            current.count += 1;
+            loginAttempts.set(key, current);
+
+            return res.status(401).json({
+                error: 'Invalid credentials',
+            });
+        }
+
+        loginAttempts.delete(key);
+
+        const token = store.createSession(user.id);
+
+        res.cookie(COOKIE_NAME, token, {
+            ...cookieOptions,
+            maxAge: SESSION_AGE,
+        });
+
+        res.json({ user });
     });
 
-    io.on('connection', (socket) => {
-        socket.emit('system:hello', {
-            protocolVersion: 1,
-            ready: true,
+    app.get('/api/auth/me', requireAuth, (req, res) => {
+        res.json({ user: req.user });
+    });
+
+    app.post('/api/auth/logout', requireAuth, (req, res) => {
+        const token = req.sessionToken;
+
+        store.deleteSession(token);
+
+        for (const socket of io.sockets.sockets.values()) {
+            if (socket.data.sessionToken === token) {
+                socket.disconnect(true);
+            }
+        }
+
+        res.clearCookie(COOKIE_NAME, cookieOptions);
+        res.json({ ok: true });
+    });
+
+    app.get('/api/users', requireAuth, (req, res) => {
+        res.json({
+            users: store.listUsers(req.user.id),
         });
     });
 
-    return { app, httpServer, io };
+    app.get(
+        '/api/messages/:peerId',
+        requireAuth,
+        (req, res) => {
+            const peerId = Number(req.params.peerId);
+
+            if (
+                !Number.isSafeInteger(peerId) ||
+                peerId <= 0 ||
+                !store.getUserById(peerId)
+            ) {
+                return res.status(404).json({
+                    error: 'User not found',
+                });
+            }
+
+            res.json({
+                messages: store.getConversation(
+                    req.user.id,
+                    peerId
+                ),
+            });
+        }
+    );
+
+    io.use((socket, next) => {
+        const token = readSessionToken(
+            socket.request.headers.cookie
+        );
+
+        const user = store.getSessionUser(token);
+
+        if (!user) {
+            return next(new Error('Unauthorized'));
+        }
+
+        socket.data.user = user;
+        socket.data.sessionToken = token;
+
+        next();
+    });
+
+    io.on('connection', (socket) => {
+        const user = socket.data.user;
+
+        socket.join(`user:${user.id}`);
+
+        socket.emit('system:hello', {
+            ready: true,
+            protocolVersion: 1,
+            userId: user.id,
+        });
+
+        socket.on('chat:send', (payload, acknowledgement) => {
+            const reply =
+                typeof acknowledgement === 'function'
+                    ? acknowledgement
+                    : () => {};
+
+            if (!store.getSessionUser(socket.data.sessionToken)) {
+                socket.disconnect(true);
+                return reply({
+                    ok: false,
+                    error: 'Unauthorized',
+                });
+            }
+
+            const toUserId = payload?.toUserId;
+            const text = payload?.text;
+            const clientMessageId = payload?.clientMessageId;
+
+            if (
+                !Number.isSafeInteger(toUserId) ||
+                toUserId <= 0 ||
+                toUserId === user.id ||
+                !store.getUserById(toUserId) ||
+                typeof text !== 'string' ||
+                !text.trim() ||
+                text.length > 2000 ||
+                typeof clientMessageId !== 'string' ||
+                !/^[a-f0-9-]{36}$/i.test(clientMessageId)
+            ) {
+                return reply({
+                    ok: false,
+                    error: 'Invalid message',
+                });
+            }
+
+            try {
+                const result = store.saveMessage({
+                    senderId: user.id,
+                    recipientId: toUserId,
+                    clientMessageId,
+                    text: text.trim(),
+                });
+
+                if (result.created) {
+                    io.to(`user:${user.id}`)
+                        .to(`user:${toUserId}`)
+                        .emit('chat:new', result.message);
+                }
+
+                reply({
+                    ok: true,
+                    message: result.message,
+                });
+            } catch {
+                reply({
+                    ok: false,
+                    error: 'Message could not be saved',
+                });
+            }
+        });
+    });
+
+    return { app, httpServer, io, store };
 }
