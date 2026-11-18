@@ -323,6 +323,7 @@ function App() {
                                 toUserId: next.toUserId,
                                 clientMessageId: next.clientMessageId,
                                 text: next.text,
+                                clientCreatedAt: next.createdAt,
                             },
                             (
                                 err: Error | null,

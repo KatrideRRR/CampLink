@@ -232,6 +232,24 @@ export function saveOfflineContacts(
     writeData(userId, data, storage);
 }
 
+function compareMessageTime(
+    a: OfflineMessage,
+    b: OfflineMessage
+): number {
+    const first = Date.parse(a.createdAt);
+    const second = Date.parse(b.createdAt);
+
+    if (
+        Number.isFinite(first) &&
+        Number.isFinite(second) &&
+        first !== second
+    ) {
+        return first - second;
+    }
+
+    return a.id - b.id;
+}
+
 export function readOfflineMessages(
     userId: number,
     peerId: number,
@@ -251,7 +269,7 @@ export function readOfflineMessages(
                 (message.senderId === peerId &&
                     message.recipientId === userId)
         )
-        .sort((a, b) => a.id - b.id)
+        .sort(compareMessageTime)
         .slice(-MAX_MESSAGES);
 }
 
@@ -284,7 +302,7 @@ export function saveOfflineMessages(
     }
 
     const updated = [...combined.values()]
-        .sort((a, b) => a.id - b.id)
+        .sort(compareMessageTime)
         .slice(-MAX_MESSAGES);
 
     data.threads[String(peerId)] = updated;

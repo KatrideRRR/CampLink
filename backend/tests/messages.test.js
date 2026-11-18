@@ -227,6 +227,105 @@ test('authenticated private messaging', { timeout: 10000 }, async (t) => {
     assert.equal(forged.ok, true);
     assert.equal(forged.message.senderId, akim.id);
 
+    const offlineSequence = [
+        {
+            sender: 'akim',
+            text: '1',
+            clientMessageId: randomUUID(),
+            clientCreatedAt:
+                '2026-11-18T19:23:01.000+03:00',
+        },
+        {
+            sender: 'worker',
+            text: '2',
+            clientMessageId: randomUUID(),
+            clientCreatedAt:
+                '2026-11-18T08:23:02.000-08:00',
+        },
+        {
+            sender: 'akim',
+            text: '3',
+            clientMessageId: randomUUID(),
+            clientCreatedAt:
+                '2026-11-18T19:23:03.000+03:00',
+        },
+        {
+            sender: 'worker',
+            text: '4',
+            clientMessageId: randomUUID(),
+            clientCreatedAt:
+                '2026-11-18T08:23:04.000-08:00',
+        },
+    ];
+
+// Simulate independent offline queues:
+// worker sends 2 and 4 before akim sends 1 and 3.
+    for (const index of [1, 3, 0, 2]) {
+        const item = offlineSequence[index];
+
+        const fromAkim = item.sender === 'akim';
+
+        const result = await send(
+            fromAkim ? akimClient : workerClient,
+            {
+                toUserId: fromAkim ? worker.id : akim.id,
+                clientMessageId: item.clientMessageId,
+                clientCreatedAt: item.clientCreatedAt,
+                text: item.text,
+            }
+        );
+
+        assert.equal(result.ok, true);
+    }
+
+    const expectedIds = new Set(
+        offlineSequence.map(
+            (item) => item.clientMessageId
+        )
+    );
+
+// Both participants must see the same order.
+    for (const [cookie, peerId] of [
+        [akimCookie, worker.id],
+        [workerCookie, akim.id],
+    ]) {
+        const response = await fetch(
+            `${url}/api/messages/${peerId}`,
+            {
+                headers: { Cookie: cookie },
+            }
+        );
+
+        assert.equal(response.status, 200);
+
+        const data = await response.json();
+
+        const restored = data.messages.filter(
+            (message) =>
+                expectedIds.has(message.clientMessageId)
+        );
+
+        assert.deepEqual(
+            restored.map((message) => message.text),
+            ['1', '2', '3', '4']
+        );
+
+        assert.deepEqual(
+            restored.map((message) => message.createdAt),
+            offlineSequence.map(
+                (item) =>
+                    new Date(item.clientCreatedAt).toISOString()
+            )
+        );
+
+        assert.ok(
+            restored.every(
+                (message) =>
+                    typeof message.serverReceivedAt === 'string'
+            )
+        );
+    }
+
     const workerReply = await send(workerClient, {
         toUserId: akim.id,
         clientMessageId: randomUUID(),

@@ -27,6 +27,33 @@ function publicUser(row) {
     };
 }
 
+function normalizeClientCreatedAt(value) {
+    // Compatibility with previously created messages.
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    // ISO 8601 with an explicit timezone.
+    const isoPattern =
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+    if (
+        typeof value !== 'string' ||
+        !isoPattern.test(value)
+    ) {
+        throw new Error('Invalid client creation time');
+    }
+
+    const timestamp = Date.parse(value);
+
+    if (!Number.isFinite(timestamp)) {
+        throw new Error('Invalid client creation time');
+    }
+
+    // Always store an absolute UTC timestamp.
+    return new Date(timestamp).toISOString();
+}
+
 export function createStore(databasePath = DEFAULT_DB_PATH) {
     if (databasePath !== ':memory:') {
         mkdirSync(dirname(databasePath), { recursive: true });
@@ -74,17 +101,37 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
       ON messages(recipient_id, sender_id, id);
   `);
 
-    const selectMessage = db.prepare(`
-    SELECT
-      id,
-      sender_id AS senderId,
-      recipient_id AS recipientId,
-      client_message_id AS clientMessageId,
-      text,
-      created_at AS createdAt
-    FROM messages
-    WHERE id = ?
+    const messageColumns = db.pragma(
+        'table_info(messages)'
+    );
+
+    const hasClientCreatedAt = messageColumns.some(
+        (column) => column.name === 'client_created_at'
+    );
+
+    if (!hasClientCreatedAt) {
+        db.exec(`
+    ALTER TABLE messages
+    ADD COLUMN client_created_at TEXT
   `);
+    }
+
+    const selectMessage = db.prepare(`
+        SELECT
+            id,
+            sender_id AS senderId,
+            recipient_id AS recipientId,
+            client_message_id AS clientMessageId,
+            text,
+            COALESCE(
+                    client_created_at,
+                    created_at
+            ) AS createdAt,
+            client_created_at AS clientCreatedAt,
+            created_at AS serverReceivedAt
+        FROM messages
+        WHERE id = ?
+    `);
 
     return {
         createUser(username, password) {
@@ -213,30 +260,39 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                         recipientId,
                         clientMessageId,
                         text,
+                        clientCreatedAt,
                     }) {
+            const normalizedClientTime =
+                normalizeClientCreatedAt(clientCreatedAt);
+
+            const serverReceivedAt =
+                new Date().toISOString();
+
             const result = db.prepare(`
-        INSERT OR IGNORE INTO messages (
-          sender_id,
-          recipient_id,
-          client_message_id,
-          text,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?)
-      `).run(
+    INSERT OR IGNORE INTO messages (
+      sender_id,
+      recipient_id,
+      client_message_id,
+      text,
+      created_at,
+      client_created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
                 senderId,
                 recipientId,
                 clientMessageId,
                 text,
-                new Date().toISOString()
+                serverReceivedAt,
+                normalizedClientTime
             );
 
             const row = db.prepare(`
-        SELECT id, recipient_id, text
-        FROM messages
-        WHERE sender_id = ?
-          AND client_message_id = ?
-      `).get(senderId, clientMessageId);
+    SELECT id, recipient_id, text
+    FROM messages
+    WHERE sender_id = ?
+      AND client_message_id = ?
+  `).get(senderId, clientMessageId);
 
             if (
                 !row ||
@@ -254,21 +310,28 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
 
         getConversation(userId, peerId) {
             const rows = db.prepare(`
-        SELECT
-          id,
-          sender_id AS senderId,
-          recipient_id AS recipientId,
-          client_message_id AS clientMessageId,
-          text,
-          created_at AS createdAt
-        FROM messages
-        WHERE
-          (sender_id = ? AND recipient_id = ?)
-          OR
-          (sender_id = ? AND recipient_id = ?)
-        ORDER BY id DESC
-        LIMIT 100
-      `).all(userId, peerId, peerId, userId);
+                SELECT
+                    id,
+                    sender_id AS senderId,
+                    recipient_id AS recipientId,
+                    client_message_id AS clientMessageId,
+                    text,
+                    COALESCE(
+                            client_created_at,
+                            created_at
+                    ) AS createdAt,
+                    client_created_at AS clientCreatedAt,
+                    created_at AS serverReceivedAt
+                FROM messages
+                WHERE
+                    (sender_id = ? AND recipient_id = ?)
+                   OR
+                    (sender_id = ? AND recipient_id = ?)
+                ORDER BY
+                    COALESCE(client_created_at, created_at) DESC,
+                    id DESC
+                    LIMIT 100
+            `).all(userId, peerId, peerId, userId);
 
             return rows.reverse();
         },

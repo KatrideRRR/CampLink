@@ -231,6 +231,8 @@ export function createAppServer(options = {}) {
             const text = payload?.text;
             const clientMessageId = payload?.clientMessageId;
 
+            const clientCreatedAt = payload?.clientCreatedAt;
+
             if (
                 !Number.isSafeInteger(toUserId) ||
                 toUserId <= 0 ||
@@ -254,6 +256,7 @@ export function createAppServer(options = {}) {
                     recipientId: toUserId,
                     clientMessageId,
                     text: text.trim(),
+                    clientCreatedAt,
                 });
 
                 if (result.created) {
