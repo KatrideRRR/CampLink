@@ -22,6 +22,8 @@ import {
     saveOfflineMessages,
     saveOfflineUser,
 } from './services/offline';
+import { deliverMessage } from './services/delivery';
+import type { MessageTransport } from './services/transports';
 import { buildChatTimeline } from './services/timeline';
 import {
     loadThemePreference,
@@ -292,6 +294,47 @@ function App() {
         const socket = connectToServer(setConnected);
         socketRef.current = socket;
 
+        const internetTransport: MessageTransport = {
+            id: 'primary-internet',
+            kind: 'internet',
+            priority: 10,
+
+            async isAvailable() {
+                return socket.connected;
+            },
+
+            async send(message) {
+                return new Promise((resolve, reject) => {
+                    socket.timeout(5000).emit(
+                        'chat:send',
+                        {
+                            toUserId: message.toUserId,
+                            clientMessageId: message.clientMessageId,
+                            text: message.text,
+                            clientCreatedAt: message.createdAt,
+                        },
+                        (
+                            error: Error | null,
+                            response?: SendResponse
+                        ) => {
+                            if (error) {
+                                reject(error);
+                                return;
+                            }
+
+                            if (!response) {
+                                reject(
+                                    new Error('No server acknowledgement')
+                                );
+                                return;
+                            }
+
+                            resolve(response);
+                        }
+                    );
+                });
+            },
+        };
 
         setPendingMessages(readOutbox(me.id));
 
@@ -314,25 +357,25 @@ function App() {
 
                     if (!next) break;
 
-                    const response = await new Promise<
-                        SendResponse | null
-                    >((resolve) => {
-                        socket.timeout(5000).emit(
-                            'chat:send',
-                            {
-                                toUserId: next.toUserId,
-                                clientMessageId: next.clientMessageId,
-                                text: next.text,
-                                clientCreatedAt: next.createdAt,
-                            },
-                            (
-                                err: Error | null,
-                                result?: SendResponse
-                            ) => {
-                                resolve(err ? null : result ?? null);
-                            }
-                        );
-                    });
+                    const result = await deliverMessage(next, [
+                        internetTransport,
+                    ]);
+
+                    if (result.status !== 'sent') {
+                        if (result.status === 'rejected') {
+                            setError(
+                                'Сервер отклонил сообщение: ' +
+                                result.error
+                            );
+                        }
+
+                        break;
+                    }
+
+                    const response: SendResponse = {
+                        ok: true,
+                        message: result.message,
+                    };
 
                     if (!active) break;
 
