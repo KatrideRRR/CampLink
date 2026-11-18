@@ -17,3 +17,13 @@ body {
     margin: 0;
     min-width: 320px;
 }
+
+:root[data-theme='dark'] {
+    color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+    color-scheme: light;
+    color: #181b20;
+    background: #f6f7fb;
+}

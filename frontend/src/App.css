@@ -351,3 +351,143 @@ button:disabled {
         font-size: 12px;
     }
 }
+
+
+/* Theme switcher */
+
+.sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.theme-button {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border: 1px solid #4a4d55;
+    border-radius: 11px;
+    background: transparent;
+    color: inherit;
+    font-size: 21px;
+}
+
+.theme-button:hover {
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.login-card {
+    position: relative;
+}
+
+.login-theme-button {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+}
+
+/* Light theme */
+
+:root[data-theme='light'] .login-card {
+    background: #ffffff;
+    border-color: #e1e5ec;
+}
+
+:root[data-theme='light'] .login-card > p,
+:root[data-theme='light'] .login-card .hint {
+    color: #6d7380;
+}
+
+:root[data-theme='light'] .login-card input,
+:root[data-theme='light'] .composer input {
+    background: #f4f6f9;
+    color: #181b20;
+    border-color: #cdd4dc;
+}
+
+:root[data-theme='light'] .sidebar {
+    background: #f9fafc;
+    border-color: #e1e5ec;
+}
+
+:root[data-theme='light'] .account,
+:root[data-theme='light'] .text-button,
+:root[data-theme='light'] .section-heading,
+:root[data-theme='light'] .contact-info small,
+:root[data-theme='light'] .chat-header small,
+:root[data-theme='light'] .empty-contacts {
+    color: #626a77;
+}
+
+:root[data-theme='light'] .contact {
+    color: #181b20;
+}
+
+:root[data-theme='light'] .contact:hover {
+    background: #f0f2f5;
+}
+
+:root[data-theme='light'] .contact.selected {
+    background: #e8edf3;
+}
+
+:root[data-theme='light'] .chat {
+    background: #ffffff;
+}
+
+:root[data-theme='light'] .chat-header,
+:root[data-theme='light'] .composer {
+    border-color: #e1e5ec;
+}
+
+:root[data-theme='light'] .message.incoming {
+    background: #edf1f5;
+    color: #181b20;
+}
+
+:root[data-theme='light'] .message.outgoing {
+    background: #e4efb7;
+    color: #202814;
+}
+
+:root[data-theme='light'] .message small {
+    color: #59616d;
+}
+
+:root[data-theme='light'] .empty-chat,
+:root[data-theme='light'] .no-chat {
+    color: #757d88;
+}
+
+:root[data-theme='light'] .theme-button {
+    border-color: #cdd4dc;
+}
+
+:root[data-theme='light'] .error,
+:root[data-theme='light'] .chat-error {
+    color: #ac2638 !important;
+}
+
+/* Compact mobile sidebar */
+
+@media (max-width: 650px) {
+    .sidebar-header {
+        padding: 10px;
+        gap: 4px;
+    }
+
+    .sidebar-actions {
+        gap: 4px;
+    }
+
+    .sidebar-header .connection-indicator {
+        display: none;
+    }
+
+    .sidebar-header .theme-button {
+        width: 30px;
+        height: 30px;
+    }
+}

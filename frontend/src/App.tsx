@@ -1,4 +1,3 @@
-
 import {
     useEffect,
     useRef,
@@ -7,6 +6,13 @@ import {
 } from 'react';
 import type { Socket } from 'socket.io-client';
 import { connectToServer } from './services/connection';
+import {
+    loadThemePreference,
+    nextThemePreference,
+    resolveTheme,
+    saveThemePreference,
+    type ThemePreference,
+} from './services/theme';
 import './App.css';
 
 type User = {
@@ -85,6 +91,43 @@ function belongsToChat(
 }
 
 function App() {
+
+    const [themePreference, setThemePreference] =
+        useState<ThemePreference>(loadThemePreference);
+
+    useEffect(() => {
+        const media = window.matchMedia(
+            '(prefers-color-scheme: dark)'
+        );
+
+        const applyTheme = () => {
+            document.documentElement.dataset.theme =
+                resolveTheme(themePreference, media.matches);
+        };
+
+        applyTheme();
+
+        media.addEventListener('change', applyTheme);
+
+        return () => {
+            media.removeEventListener('change', applyTheme);
+        };
+    }, [themePreference]);
+
+    function cycleTheme() {
+        const next = nextThemePreference(themePreference);
+
+        saveThemePreference(next);
+        setThemePreference(next);
+    }
+
+    const themeLabel =
+        themePreference === 'system'
+            ? 'Системная'
+            : themePreference === 'light'
+                ? 'Светлая'
+                : 'Тёмная';
+
     const [loading, setLoading] = useState(true);
     const [me, setMe] = useState<User | null>(null);
     const [username, setUsername] = useState('');
@@ -332,6 +375,15 @@ function App() {
         return (
             <main className="login-page">
                 <div className="login-card">
+                    <button
+                        type="button"
+                        className="theme-button login-theme-button"
+                        onClick={cycleTheme}
+                        title={`Тема: ${themeLabel}`}
+                        aria-label={`Переключить тему. Сейчас: ${themeLabel}`}
+                    >
+                        ◐
+                    </button>
                     <div className="brand-icon">C</div>
                     <h1>CampLink</h1>
                     <p>Связь без границ.</p>
@@ -380,16 +432,30 @@ function App() {
                         <strong>CampLink</strong>
                     </div>
 
-                    <div
-                        className={`connection-indicator ${
-                            connected ? 'is-online' : ''
-                        }`}
-                        title={
-                            connected
-                                ? 'Соединение установлено'
-                                : 'Соединение отсутствует'
-                        }
-                    />
+
+                    <div className="sidebar-actions">
+                        <div
+                            className={`connection-indicator ${
+                                connected ? 'is-online' : ''
+                            }`}
+                            title={
+                                connected
+                                    ? 'Соединение установлено'
+                                    : 'Соединение отсутствует'
+                            }
+                        />
+
+                        <button
+                            type="button"
+                            className="theme-button"
+                            onClick={cycleTheme}
+                            title={`Тема: ${themeLabel}`}
+                            aria-label={`Переключить тему. Сейчас: ${themeLabel}`}
+                        >
+                            ◐
+                        </button>
+                    </div>
+
                 </div>
 
                 <div className="account">
