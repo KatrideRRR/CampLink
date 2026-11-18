@@ -1,4 +1,3 @@
-
 node_modules/
 dist/
 coverage/
@@ -9,3 +8,7 @@ coverage/
 *.log
 # Local database
 backend/data/
+mail-bridge/data/
+backend/.env
+mail-bridge/.env
+mail-bridge/.env.example

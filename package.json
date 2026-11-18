@@ -4,11 +4,13 @@
   "private": true,
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "mail-bridge"
   ],
   "scripts": {
     "dev:api": "npm run dev -w backend",
     "dev:web": "npm run dev -w frontend",
-    "test": "npm run test -w backend && npm run test:unit -w frontend && npm run lint -w frontend && npm run build -w frontend"
+    "dev:bridge": "npm run dev -w mail-bridge",
+    "test": "npm run test -w backend && npm run test -w mail-bridge && npm run test:unit -w frontend && npm run lint -w frontend && npm run build -w frontend"
   }
 }
