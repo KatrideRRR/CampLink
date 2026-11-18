@@ -7,6 +7,12 @@ import {
 import type { Socket } from 'socket.io-client';
 import { connectToServer } from './services/connection';
 import {
+    enqueueOutboxMessage,
+    readOutbox,
+    removeOutboxMessage,
+    type QueuedMessage,
+} from './services/outbox';
+import {
     loadThemePreference,
     nextThemePreference,
     resolveTheme,
@@ -140,10 +146,12 @@ function App() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
     const [connected, setConnected] = useState(false);
-    const [sending, setSending] = useState(false);
+    const [pendingMessages, setPendingMessages] =
+        useState<QueuedMessage[]>([]);
     const [error, setError] = useState('');
 
     const socketRef = useRef<Socket | null>(null);
+    const drainQueueRef = useRef<() => void>(() => {});
     const selectedPeerRef = useRef<number | null>(null);
     const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -192,7 +200,113 @@ function App() {
         const socket = connectToServer(setConnected);
         socketRef.current = socket;
 
+
+        setPendingMessages(readOutbox(me.id));
+
+        let flushing = false;
+
+        async function drainQueue() {
+            if (
+                !active ||
+                flushing ||
+                !socket.connected
+            ) {
+                return;
+            }
+
+            flushing = true;
+
+            try {
+                while (active && socket.connected) {
+                    const next = readOutbox(me.id)[0];
+
+                    if (!next) break;
+
+                    const response = await new Promise<
+                        SendResponse | null
+                    >((resolve) => {
+                        socket.timeout(5000).emit(
+                            'chat:send',
+                            {
+                                toUserId: next.toUserId,
+                                clientMessageId: next.clientMessageId,
+                                text: next.text,
+                            },
+                            (
+                                err: Error | null,
+                                result?: SendResponse
+                            ) => {
+                                resolve(err ? null : result ?? null);
+                            }
+                        );
+                    });
+
+                    if (!active) break;
+
+                    if (!response?.ok || !response.message) {
+                        break;
+                    }
+
+                    try {
+                        setPendingMessages(
+                            removeOutboxMessage(
+                                me.id,
+                                next.clientMessageId
+                            )
+                        );
+                    } catch {
+                        setError(
+                            'Не удалось обновить локальную очередь'
+                        );
+                        break;
+                    }
+
+                    const message = response.message;
+                    const peerId = selectedPeerRef.current;
+
+                    if (
+                        peerId !== null &&
+                        belongsToChat(message, me.id, peerId)
+                    ) {
+                        setMessages((current) =>
+                            mergeMessages(current, [message])
+                        );
+                    }
+                }
+            } finally {
+                flushing = false;
+            }
+        }
+
+        drainQueueRef.current = () => {
+            void drainQueue();
+        };
+
         socket.on('chat:new', (message: ChatMessage) => {
+
+            if (message.senderId === me.id) {
+                const queued = readOutbox(me.id);
+
+                if (
+                    queued.some(
+                        (item) =>
+                            item.clientMessageId ===
+                            message.clientMessageId
+                    )
+                ) {
+                    try {
+                        setPendingMessages(
+                            removeOutboxMessage(
+                                me.id,
+                                message.clientMessageId
+                            )
+                        );
+                    } catch {
+                        // The message remains queued for a safe retry.
+                    }
+                }
+            }
+
             const peerId = selectedPeerRef.current;
 
             if (
@@ -206,6 +320,7 @@ function App() {
         });
 
         socket.on('connect', () => {
+            void drainQueue();
             const peerId = selectedPeerRef.current;
 
             if (peerId === null) return;
@@ -228,8 +343,16 @@ function App() {
                 .catch(() => {});
         });
 
+        const retryTimer = window.setInterval(() => {
+            if (socket.connected) {
+                void drainQueue();
+            }
+        }, 10000);
+
         return () => {
             active = false;
+            window.clearInterval(retryTimer);
+            drainQueueRef.current = () => {};
             socket.disconnect();
             socketRef.current = null;
             setConnected(false);
@@ -273,7 +396,7 @@ function App() {
         chatEndRef.current?.scrollIntoView({
             behavior: 'smooth',
         });
-    }, [messages]);
+    }, [messages, pendingMessages]);
 
     function selectPeer(id: number) {
         selectedPeerRef.current = id;
@@ -307,7 +430,7 @@ function App() {
             setError('Не удалось завершить сессию');
             return;
         }
-
+        setPendingMessages([]);
         socketRef.current?.disconnect();
         selectedPeerRef.current = null;
         setMe(null);
@@ -318,54 +441,44 @@ function App() {
         setError('');
     }
 
+
     function handleSend(event: FormEvent) {
         event.preventDefault();
 
         const text = draft.trim();
-        const socket = socketRef.current;
 
         if (
+            !me ||
             !text ||
             text.length > 2000 ||
-            !socket?.connected ||
-            selectedPeerId === null ||
-            sending
+            selectedPeerId === null
         ) {
             return;
         }
 
-        setSending(true);
-        setError('');
-
-        socket.timeout(5000).emit(
-            'chat:send',
-            {
-                toUserId: selectedPeerId,
-                text,
-                clientMessageId: crypto.randomUUID(),
-            },
-            (err: Error | null, response?: SendResponse) => {
-                setSending(false);
-
-                if (err || !response?.ok || !response.message) {
-                    setError(
-                        'Не удалось подтвердить отправку сообщения'
-                    );
-                    return;
+        try {
+            const pending = enqueueOutboxMessage(
+                me.id,
+                {
+                    clientMessageId: crypto.randomUUID(),
+                    toUserId: selectedPeerId,
+                    text,
+                    createdAt: new Date().toISOString(),
                 }
+            );
 
-                setDraft('');
+            setPendingMessages(pending);
+            setDraft('');
+            setError('');
 
-                if (selectedPeerRef.current === selectedPeerId) {
-                    const message = response.message;
-
-                    setMessages((current) =>
-                        mergeMessages(current, [message])
-                    );
-                }
-            }
-        );
+            drainQueueRef.current();
+        } catch {
+            setError(
+                'Не удалось сохранить сообщение на устройстве'
+            );
+        }
     }
+
 
     if (loading) {
         return <main className="loading">CampLink</main>;
@@ -516,7 +629,11 @@ function App() {
                         </header>
 
                         <div className="message-list">
-                            {messages.length === 0 && (
+                            {messages.length === 0 &&
+                                !pendingMessages.some(
+                                    (message) =>
+                                        message.toUserId === selectedPeerId
+                                ) &&  (
                                 <p className="empty-chat">
                                     Начните переписку
                                 </p>
@@ -546,6 +663,34 @@ function App() {
                                 </div>
                             ))}
 
+
+                            {pendingMessages
+                                .filter(
+                                    (message) =>
+                                        message.toUserId === selectedPeerId &&
+                                        !messages.some(
+                                            (saved) =>
+                                                saved.clientMessageId ===
+                                                message.clientMessageId
+                                        )
+                                )
+                                .map((message) => (
+                                    <div
+                                        key={message.clientMessageId}
+                                        className="message outgoing queued"
+                                    >
+                                        <div className="message-text">
+                                            {message.text}
+                                        </div>
+
+                                        <small>
+                                            {connected
+                                                ? 'Отправляем...'
+                                                : 'В очереди · ожидаем связь'}
+                                        </small>
+                                    </div>
+                                ))}
+
                             <div ref={chatEndRef} />
                         </div>
 
@@ -562,24 +707,15 @@ function App() {
                                 onChange={(event) =>
                                     setDraft(event.target.value)
                                 }
-                                placeholder={
-                                    connected
-                                        ? 'Сообщение'
-                                        : 'Ожидаем подключения...'
-                                }
+                                placeholder="Сообщение"
                                 maxLength={2000}
-                                disabled={!connected || sending}
                             />
 
                             <button
                                 type="submit"
-                                disabled={
-                                    !connected ||
-                                    !draft.trim() ||
-                                    sending
-                                }
+                                disabled={!draft.trim()}
                             >
-                                {sending ? '...' : 'Отправить'}
+                                Отправить
                             </button>
                         </form>
                     </>

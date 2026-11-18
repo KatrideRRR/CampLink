@@ -491,3 +491,25 @@ button:disabled {
         height: 30px;
     }
 }
+
+
+/* Pending message */
+
+.message.queued {
+    opacity: 0.78;
+    border: 1px dashed #788769;
+}
+
+.message.queued small {
+    font-style: italic;
+}
+
+:root[data-theme='light'] .message.queued {
+    background: #eef2e2;
+    color: #253025;
+    border-color: #a4b391;
+}
+
+:root[data-theme='light'] .message.queued small {
+    color: #606d5e;
+}
