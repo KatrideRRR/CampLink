@@ -513,3 +513,18 @@ button:disabled {
 :root[data-theme='light'] .message.queued small {
     color: #606d5e;
 }
+
+
+.offline-banner {
+    padding: 11px 16px;
+    background: #443622;
+    color: #f7d69b;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+:root[data-theme='light'] .offline-banner {
+    background: #fff2d9;
+    color: #7b5113;
+}

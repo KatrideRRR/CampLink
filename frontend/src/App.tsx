@@ -13,6 +13,16 @@ import {
     type QueuedMessage,
 } from './services/outbox';
 import {
+    clearOfflineCache,
+    decideSession,
+    readOfflineContacts,
+    readOfflineMessages,
+    readOfflineUser,
+    saveOfflineContacts,
+    saveOfflineMessages,
+    saveOfflineUser,
+} from './services/offline';
+import {
     loadThemePreference,
     nextThemePreference,
     resolveTheme,
@@ -135,6 +145,7 @@ function App() {
                 : 'Тёмная';
 
     const [loading, setLoading] = useState(true);
+    const [offlinePreview, setOfflinePreview] = useState(false);
     const [me, setMe] = useState<User | null>(null);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -162,16 +173,68 @@ function App() {
     useEffect(() => {
         let active = true;
 
-        apiGet<{ user: User }>('/api/auth/me')
-            .then(({ user }) => {
-                if (active) setMe(user);
-            })
-            .catch(() => {
-                // No session yet: show login screen.
-            })
-            .finally(() => {
-                if (active) setLoading(false);
-            });
+        async function restoreSession() {
+            const cached = readOfflineUser();
+
+            let status: number | 'unreachable' = 'unreachable';
+            let serverUser: User | null = null;
+
+            const controller = new AbortController();
+
+            const timer = window.setTimeout(() => {
+                controller.abort();
+            }, 4000);
+
+            try {
+                const response = await fetch('/api/auth/me', {
+                    cache: 'no-store',
+                    signal: controller.signal,
+                });
+
+                status = response.status;
+
+                if (response.ok) {
+                    const result = await response.json() as {
+                        user: User;
+                    };
+
+                    serverUser = result.user;
+                }
+            } catch {
+                status = 'unreachable';
+            } finally {
+                window.clearTimeout(timer);
+            }
+
+            if (!active) return;
+
+            const result = decideSession(
+                status,
+                cached,
+                serverUser
+            );
+
+            if (result.invalidate && cached) {
+                clearOfflineCache(cached.id);
+            }
+
+            if (result.user && !result.offline) {
+                saveOfflineUser(result.user);
+            }
+
+            setMe(result.user);
+            setOfflinePreview(result.offline);
+
+            if (!result.user && status !== 401) {
+                setError(
+                    'Сервер недоступен. Для первого входа нужна связь.'
+                );
+            }
+
+            setLoading(false);
+        }
+
+        void restoreSession();
 
         return () => {
             active = false;
@@ -183,9 +246,25 @@ function App() {
 
         let active = true;
 
+
+        const cachedContacts = readOfflineContacts(me.id);
+
+        setPeers(cachedContacts);
+
+        if (
+            cachedContacts.length > 0 &&
+            selectedPeerRef.current === null
+        ) {
+            selectedPeerRef.current = cachedContacts[0].id;
+            setSelectedPeerId(cachedContacts[0].id);
+        }
+
         apiGet<{ users: User[] }>('/api/users')
             .then(({ users }) => {
                 if (!active) return;
+
+                saveOfflineContacts(me.id, users);
+
                 setPeers(users);
 
                 if (users.length > 0 && selectedPeerRef.current === null) {
@@ -194,7 +273,9 @@ function App() {
                 }
             })
             .catch(() => {
-                if (active) setError('Не удалось загрузить контакты');
+                if (active && cachedContacts.length === 0) {
+                    setError('Не удалось загрузить контакты');
+                }
             });
 
         const socket = connectToServer(setConnected);
@@ -262,6 +343,11 @@ function App() {
                     }
 
                     const message = response.message;
+                    saveOfflineMessages(
+                        me.id,
+                        message.recipientId,
+                        [message]
+                    );
                     const peerId = selectedPeerRef.current;
 
                     if (
@@ -283,6 +369,17 @@ function App() {
         };
 
         socket.on('chat:new', (message: ChatMessage) => {
+
+            const partnerId =
+                message.senderId === me.id
+                    ? message.recipientId
+                    : message.senderId;
+
+            saveOfflineMessages(
+                me.id,
+                partnerId,
+                [message]
+            );
 
             if (message.senderId === me.id) {
                 const queued = readOutbox(me.id);
@@ -320,6 +417,7 @@ function App() {
         });
 
         socket.on('connect', () => {
+            setOfflinePreview(false);
             void drainQueue();
             const peerId = selectedPeerRef.current;
 
@@ -329,18 +427,42 @@ function App() {
                 `/api/messages/${peerId}`
             )
                 .then(({ messages: history }) => {
+                    if (!active) return;
+
+                    const cached = saveOfflineMessages(
+                        me.id,
+                        peerId,
+                        history
+                    );
+
                     if (selectedPeerRef.current === peerId) {
                         setMessages((current) =>
                             mergeMessages(
                                 current.filter((message) =>
                                     belongsToChat(message, me.id, peerId)
                                 ),
-                                history
+                                cached
                             )
                         );
                     }
                 })
                 .catch(() => {});
+        });
+
+        socket.on('connect_error', (socketError: Error) => {
+            if (socketError.message !== 'Unauthorized') {
+                return;
+            }
+
+            if (!active) return;
+
+            clearOfflineCache(me.id);
+            setMe(null);
+            setPeers([]);
+            setMessages([]);
+            setConnected(false);
+            setOfflinePreview(false);
+            setError('Сессия истекла. Войдите снова.');
         });
 
         const retryTimer = window.setInterval(() => {
@@ -364,27 +486,45 @@ function App() {
 
         let active = true;
 
+        setMessages(
+            readOfflineMessages(me.id, selectedPeerId)
+        );
+
         apiGet<{ messages: ChatMessage[] }>(
             `/api/messages/${selectedPeerId}`
         )
             .then(({ messages: history }) => {
-                if (active) {
-                    setMessages((current) =>
-                        mergeMessages(
-                            current.filter((message) =>
-                                belongsToChat(
-                                    message,
-                                    me.id,
-                                    selectedPeerId
-                                )
-                            ),
-                            history
-                        )
-                    );
-                }
+                if (!active) return;
+
+                const cached = saveOfflineMessages(
+                    me.id,
+                    selectedPeerId,
+                    history
+                );
+
+                setMessages((current) =>
+                    mergeMessages(
+                        current.filter((message) =>
+                            belongsToChat(
+                                message,
+                                me.id,
+                                selectedPeerId
+                            )
+                        ),
+                        cached
+                    )
+                );
             })
             .catch(() => {
-                if (active) setError('Не удалось загрузить историю');
+                if (
+                    active &&
+                    readOfflineMessages(
+                        me.id,
+                        selectedPeerId
+                    ).length === 0
+                ) {
+                    setError('История пока недоступна');
+                }
             });
 
         return () => {
@@ -417,6 +557,8 @@ function App() {
             );
 
             setPassword('');
+            saveOfflineUser(result.user);
+            setOfflinePreview(false);
             setMe(result.user);
         } catch {
             setError('Неверный логин или пароль');
@@ -429,6 +571,9 @@ function App() {
         } catch {
             setError('Не удалось завершить сессию');
             return;
+        }
+        if (me) {
+            clearOfflineCache(me.id);
         }
         setPendingMessages([]);
         socketRef.current?.disconnect();
@@ -615,6 +760,15 @@ function App() {
             </aside>
 
             <section className="chat">
+
+                {(!connected || offlinePreview) && (
+                    <div className="offline-banner" role="status">
+                        Нет соединения с сервером.
+                        Доступна сохранённая история.
+                        Новые сообщения будут отправлены позже.
+                    </div>
+                )}
+
                 {selectedPeer ? (
                     <>
                         <header className="chat-header">
