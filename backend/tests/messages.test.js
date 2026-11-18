@@ -227,6 +227,53 @@ test('authenticated private messaging', { timeout: 10000 }, async (t) => {
     assert.equal(forged.ok, true);
     assert.equal(forged.message.senderId, akim.id);
 
+    const workerReply = await send(workerClient, {
+        toUserId: akim.id,
+        clientMessageId: randomUUID(),
+        text: 'Ответ сотрудника',
+    });
+
+    assert.equal(workerReply.ok, true);
+
+    const akimFollowup = await send(akimClient, {
+        toUserId: worker.id,
+        clientMessageId: randomUUID(),
+        text: 'Следующее сообщение',
+    });
+
+    assert.equal(akimFollowup.ok, true);
+
+    const orderedResponse = await fetch(
+        `${url}/api/messages/${worker.id}`,
+        {
+            headers: {
+                Cookie: akimCookie,
+            },
+        }
+    );
+
+    assert.equal(orderedResponse.status, 200);
+
+    const orderedData = await orderedResponse.json();
+
+    assert.deepEqual(
+        orderedData.messages.slice(-3).map(
+            (message) => message.senderId
+        ),
+        [akim.id, worker.id, akim.id]
+    );
+
+    assert.deepEqual(
+        orderedData.messages.slice(-3).map(
+            (message) => message.text
+        ),
+        [
+            'Second message',
+            'Ответ сотрудника',
+            'Следующее сообщение',
+        ]
+    );
+
     // Logout invalidates the original session.
     const logout = await fetch(
         `${url}/api/auth/logout`,

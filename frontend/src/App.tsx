@@ -22,6 +22,7 @@ import {
     saveOfflineMessages,
     saveOfflineUser,
 } from './services/offline';
+import { buildChatTimeline } from './services/timeline';
 import {
     loadThemePreference,
     nextThemePreference,
@@ -169,6 +170,16 @@ function App() {
     const selectedPeer =
         peers.find((peer) => peer.id === selectedPeerId) ??
         null;
+
+    const timeline =
+        me && selectedPeerId !== null
+            ? buildChatTimeline(
+                messages,
+                pendingMessages,
+                me.id,
+                selectedPeerId
+            )
+            : [];
 
     useEffect(() => {
         let active = true;
@@ -783,67 +794,55 @@ function App() {
                         </header>
 
                         <div className="message-list">
-                            {messages.length === 0 &&
-                                !pendingMessages.some(
-                                    (message) =>
-                                        message.toUserId === selectedPeerId
-                                ) &&  (
+
+                            {timeline.length === 0 && (
                                 <p className="empty-chat">
                                     Начните переписку
                                 </p>
                             )}
 
-                            {messages.map((message) => (
-                                <div
-                                    key={message.id}
-                                    className={`message ${
-                                        message.senderId === me.id
-                                            ? 'outgoing'
-                                            : 'incoming'
-                                    }`}
-                                >
-                                    <div className="message-text">
-                                        {message.text}
-                                    </div>
+                            {timeline.map((item) => {
+                                const isPending = item.status === 'pending';
 
-                                    <small>
-                                        {new Date(
-                                            message.createdAt
-                                        ).toLocaleTimeString('ru-RU', {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        })}
-                                    </small>
-                                </div>
-                            ))}
+                                const isOutgoing =
+                                    isPending ||
+                                    (
+                                        item.status === 'confirmed' &&
+                                        item.message.senderId === me.id
+                                    );
 
+                                const message = item.message;
 
-                            {pendingMessages
-                                .filter(
-                                    (message) =>
-                                        message.toUserId === selectedPeerId &&
-                                        !messages.some(
-                                            (saved) =>
-                                                saved.clientMessageId ===
-                                                message.clientMessageId
-                                        )
-                                )
-                                .map((message) => (
+                                const key = isPending
+                                    ? `pending:${message.clientMessageId}`
+                                    : `confirmed:${item.message.id}`;
+
+                                return (
                                     <div
-                                        key={message.clientMessageId}
-                                        className="message outgoing queued"
+                                        key={key}
+                                        className={`message ${
+                                            isOutgoing ? 'outgoing' : 'incoming'
+                                        }${isPending ? ' queued' : ''}`}
                                     >
                                         <div className="message-text">
                                             {message.text}
                                         </div>
 
                                         <small>
-                                            {connected
-                                                ? 'Отправляем...'
-                                                : 'В очереди · ожидаем связь'}
+                                            {item.status === 'pending'
+                                                ? connected
+                                                    ? 'Отправляем...'
+                                                    : 'В очереди · ожидаем связь'
+                                                : new Date(
+                                                    message.createdAt
+                                                ).toLocaleTimeString('ru-RU', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })}
                                         </small>
                                     </div>
-                                ))}
+                                );
+                            })}
 
                             <div ref={chatEndRef} />
                         </div>
