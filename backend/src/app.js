@@ -1,4 +1,7 @@
-
+import {
+    createHash,
+    timingSafeEqual,
+} from 'node:crypto';
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
@@ -6,6 +9,24 @@ import { createStore } from './store.js';
 
 const COOKIE_NAME = 'camplink_session';
 const SESSION_AGE = 7 * 24 * 60 * 60 * 1000;
+
+function gatewaySecretsMatch(received, expected) {
+    if (
+        typeof received !== 'string' ||
+        typeof expected !== 'string' ||
+        expected.length < 32
+    ) {
+        return false;
+    }
+
+    const hash = (value) =>
+        createHash('sha256').update(value).digest();
+
+    return timingSafeEqual(
+        hash(received),
+        hash(expected)
+    );
+}
 
 function readSessionToken(header = '') {
     const match = header.match(
@@ -55,6 +76,18 @@ export function createAppServer(options = {}) {
         },
     });
 
+    function persistAndBroadcast(payload) {
+        const result = store.saveMessage(payload);
+
+        if (result.created) {
+            io.to(`user:${payload.senderId}`)
+                .to(`user:${payload.recipientId}`)
+                .emit('chat:new', result.message);
+        }
+
+        return result;
+    }
+
     const loginAttempts = new Map();
 
     function requireAuth(req, res, next) {
@@ -78,6 +111,100 @@ export function createAppServer(options = {}) {
             service: 'camplink-api',
             protocolVersion: 1,
         });
+    });
+
+    app.post('/api/internal/email/ingest', (req, res) => {
+        const gatewaySecret =
+            options.emailGatewaySecret ??
+            process.env.CAMPLINK_EMAIL_GATEWAY_SECRET;
+
+        if (
+            typeof gatewaySecret !== 'string' ||
+            gatewaySecret.length < 32
+        ) {
+            return res.status(503).json({
+                error: 'Email gateway is not configured',
+            });
+        }
+
+        const providedSecret =
+            req.get('x-camplink-gateway-secret');
+
+        if (
+            !gatewaySecretsMatch(
+                providedSecret,
+                gatewaySecret
+            )
+        ) {
+            return res.status(401).json({
+                error: 'Unauthorized gateway',
+            });
+        }
+
+        const {
+            senderId,
+            recipientId,
+            clientMessageId,
+            clientCreatedAt,
+            text,
+        } = req.body ?? {};
+
+        const validId =
+            typeof clientMessageId === 'string' &&
+            /^[a-f0-9-]{36}$/i.test(clientMessageId);
+
+        const validTime =
+            typeof clientCreatedAt === 'string' &&
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/
+                .test(clientCreatedAt) &&
+            Number.isFinite(Date.parse(clientCreatedAt));
+
+        if (
+            !Number.isSafeInteger(senderId) ||
+            !Number.isSafeInteger(recipientId) ||
+            senderId <= 0 ||
+            recipientId <= 0 ||
+            senderId === recipientId ||
+            !validId ||
+            !validTime ||
+            typeof text !== 'string' ||
+            !text.trim() ||
+            text.length > 2000
+        ) {
+            return res.status(400).json({
+                error: 'Invalid email message envelope',
+            });
+        }
+
+        if (
+            !store.getUserById(senderId) ||
+            !store.getUserById(recipientId)
+        ) {
+            return res.status(404).json({
+                error: 'User not found',
+            });
+        }
+
+        try {
+            const result = persistAndBroadcast({
+                senderId,
+                recipientId,
+                clientMessageId,
+                clientCreatedAt,
+                text: text.trim(),
+            });
+
+            return res.status(result.created ? 201 : 200)
+                .json({
+                    ok: true,
+                    duplicate: !result.created,
+                    message: result.message,
+                });
+        } catch {
+            return res.status(409).json({
+                error: 'Message could not be accepted',
+            });
+        }
     });
 
     app.post('/api/auth/login', (req, res) => {
@@ -251,19 +378,13 @@ export function createAppServer(options = {}) {
             }
 
             try {
-                const result = store.saveMessage({
+                const result = persistAndBroadcast({
                     senderId: user.id,
                     recipientId: toUserId,
                     clientMessageId,
                     text: text.trim(),
                     clientCreatedAt,
                 });
-
-                if (result.created) {
-                    io.to(`user:${user.id}`)
-                        .to(`user:${toUserId}`)
-                        .emit('chat:new', result.message);
-                }
 
                 reply({
                     ok: true,
