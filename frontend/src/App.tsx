@@ -190,6 +190,8 @@ function App() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
     const [connected, setConnected] = useState(false);
+    const [showOfflineBanner, setShowOfflineBanner] =
+        useState(false);
     const [pendingMessages, setPendingMessages] =
         useState<QueuedMessage[]>([]);
     const [error, setError] = useState('');
@@ -198,17 +200,55 @@ function App() {
     const drainQueueRef = useRef<() => void>(() => {});
     const selectedPeerRef = useRef<number | null>(null);
     const messageListRef = useRef<HTMLDivElement | null>(null);
+    const composerInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
-        return observeIosLifecycle(() => {
+        if (!me || connected) {
+            setShowOfflineBanner(false);
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setShowOfflineBanner(true);
+        }, 3000);
+
+        return () => window.clearTimeout(timer);
+    }, [me, connected]);
+
+    useEffect(() => {
+        const reconnect = () => {
             const socket = socketRef.current;
+            if (!socket) return;
 
-            if (socket && !socket.connected) {
-                socket.connect();
+            socket.disconnect();
+            socket.connect();
+        };
+
+        const scrollToLatest = () => {
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    const list = messageListRef.current;
+                    if (list) {
+                        list.scrollTop = list.scrollHeight;
+                    }
+                });
+            });
+        };
+
+        return observeIosLifecycle(
+            reconnect,
+            scrollToLatest,
+            (available) => {
+                const socket = socketRef.current;
+                if (!socket) return;
+
+                socket.disconnect();
+
+                if (available) {
+                    socket.connect();
+                }
             }
-
-            drainQueueRef.current();
-        });
+        );
     }, []);
 
     const selectedPeer =
@@ -771,6 +811,12 @@ function App() {
             setDraft('');
             setError('');
 
+            if (mobileView) {
+                composerInputRef.current?.focus({
+                    preventScroll: true,
+                });
+            }
+
             drainQueueRef.current();
         } catch {
             setError(
@@ -919,7 +965,7 @@ function App() {
 
             <section className="chat">
 
-                {(!connected || offlinePreview) && (
+                {(showOfflineBanner || offlinePreview) && (
                     <div className="offline-banner" role="status">
                         Нет соединения с сервером.
                         Доступна сохранённая история.
@@ -1011,6 +1057,7 @@ function App() {
                             onSubmit={handleSend}
                         >
                             <input
+                                ref={composerInputRef}
                                 value={draft}
                                 onChange={(event) =>
                                     setDraft(event.target.value)
@@ -1022,6 +1069,11 @@ function App() {
                             <button
                                 type="submit"
                                 disabled={!draft.trim()}
+                                onMouseDown={(event) => {
+                                    if (mobileView) {
+                                        event.preventDefault();
+                                    }
+                                }}
                             >
                                 Отправить
                             </button>

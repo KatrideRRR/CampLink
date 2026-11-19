@@ -2,12 +2,19 @@
 import { Capacitor } from '@capacitor/core';
 import { App as NativeApp } from '@capacitor/app';
 import { Keyboard } from '@capacitor/keyboard';
+import { Network } from '@capacitor/network';
 
 type Listener = {
     remove: () => Promise<void>;
 };
 
 export function installViewportTracking() {
+    if (
+        Capacitor.isNativePlatform() &&
+        Capacitor.getPlatform() === 'ios'
+    ) {
+        return;
+    }
     const update = () => {
         const viewport = window.visualViewport;
 
@@ -40,7 +47,9 @@ export function installViewportTracking() {
 }
 
 export function observeIosLifecycle(
-    onResume: () => void
+    onResume: () => void,
+    onKeyboardSettled: () => void,
+    onNetworkChange: (connected: boolean) => void
 ): () => void {
     if (
         !Capacitor.isNativePlatform() ||
@@ -93,11 +102,28 @@ export function observeIosLifecycle(
 
     register(
         Keyboard.addListener(
-            'keyboardWillHide',
+            'keyboardDidShow',
+            onKeyboardSettled
+        )
+    );
+
+    register(
+        Keyboard.addListener(
+            'keyboardDidHide',
             () => {
                 document.documentElement.classList.remove(
                     'camplink-keyboard-open'
                 );
+                onKeyboardSettled();
+            }
+        )
+    );
+
+    register(
+        Network.addListener(
+            'networkStatusChange',
+            ({ connected }) => {
+                onNetworkChange(connected);
             }
         )
     );

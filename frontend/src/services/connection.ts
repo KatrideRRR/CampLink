@@ -7,6 +7,9 @@ export function connectToServer(
     const socket = io({
         path: '/socket.io',
         transports: ['websocket', 'polling'],
+        tryAllTransports: true,
+        reconnectionDelayMax: 3000,
+        timeout: 10000,
         withCredentials: true,
         reconnection: true,
         reconnectionDelay: 1000,
