@@ -162,6 +162,7 @@ function App() {
     const [peers, setPeers] = useState<User[]>([]);
     const [selectedPeerId, setSelectedPeerId] =
         useState<number | null>(null);
+    const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
@@ -639,6 +640,7 @@ function App() {
     }, [messages, pendingMessages]);
 
     function selectPeer(id: number) {
+        setMobileChatOpen(true);
         selectedPeerRef.current = id;
         setSelectedPeerId(id);
         setMessages([]);
@@ -682,6 +684,7 @@ function App() {
         setMe(null);
         setPeers([]);
         setSelectedPeerId(null);
+        setMobileChatOpen(false);
         setMessages([]);
         setConnected(false);
         setError('');
@@ -783,7 +786,8 @@ function App() {
     }
 
     return (
-        <main className="messenger">
+        <main className={`messenger ${mobileChatOpen ? 'mobile-chat-open' : 'mobile-contacts-open'}`}>
+
             <aside className="sidebar">
                 <div className="sidebar-header">
                     <div className="brand">
@@ -873,6 +877,14 @@ function App() {
                 {selectedPeer ? (
                     <>
                         <header className="chat-header">
+                            <button
+                                type="button"
+                                className="mobile-back"
+                                onClick={() => setMobileChatOpen(false)}
+                                aria-label="Вернуться к списку чатов"
+                            >
+                                ‹ <span>Чаты</span>
+                            </button>
                             <div className="avatar">
                                 {selectedPeer.username[0].toUpperCase()}
                             </div>

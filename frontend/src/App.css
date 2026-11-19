@@ -601,3 +601,187 @@ button:disabled {
         font-size: 16px;
     }
 }
+
+
+/* CampLink: full-screen mobile navigation */
+
+.mobile-back {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 8px 6px 8px 0;
+    cursor: pointer;
+}
+
+@media (max-width: 650px) {
+    html,
+    body,
+    #root {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #111317;
+    }
+
+    :root[data-theme='light'],
+    :root[data-theme='light'] body,
+    :root[data-theme='light'] #root {
+        background: #ffffff;
+    }
+
+    .messenger {
+        display: flex;
+        width: 100%;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: #111317;
+    }
+
+    :root[data-theme='light'] .messenger {
+        background: #ffffff;
+    }
+
+    .sidebar,
+    .chat {
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        flex: 1 1 auto;
+        padding-top: 0;
+    }
+
+    .messenger.mobile-chat-open .sidebar,
+    .messenger.mobile-contacts-open .chat {
+        display: none;
+    }
+
+    .sidebar-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        gap: 12px;
+        flex-shrink: 0;
+    }
+
+    .brand {
+        gap: 12px;
+    }
+
+    .brand strong {
+        display: block;
+    }
+
+    .sidebar-actions {
+        gap: 10px;
+    }
+
+    .account {
+        display: flex;
+        padding: 0 16px 12px;
+    }
+
+    .section-heading {
+        display: block;
+        padding: 12px 16px;
+    }
+
+    .contact-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .contact {
+        justify-content: flex-start;
+        gap: 12px;
+        padding: 12px 16px;
+    }
+
+    .contact-info {
+        display: flex;
+        min-width: 0;
+    }
+
+    .contact-info strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .empty-contacts {
+        display: block;
+    }
+
+    .chat-header {
+        flex-shrink: 0;
+        min-height: 58px;
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .mobile-back {
+        display: inline-flex;
+        flex-shrink: 0;
+    }
+
+    .message-list {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding: 12px;
+    }
+
+    .offline-banner {
+        flex-shrink: 0;
+        padding: 8px 12px;
+    }
+
+    .composer {
+        flex-shrink: 0;
+        padding: 10px 10px 12px;
+        gap: 8px;
+    }
+
+    .composer input {
+        font-size: 16px;
+    }
+
+    .composer button {
+        padding: 12px;
+    }
+
+    .login-page {
+        min-height: 100dvh;
+        padding-top:
+            calc(24px + env(safe-area-inset-top, 0px));
+        padding-bottom:
+            calc(24px + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/*
+ * Temporary native iPhone fallback.
+ * This protects the header when WKWebView reports
+ * zero safe-area insets in remote test mode.
+ */
+@media (max-width: 650px) {
+    :root.camplink-native-ios .messenger {
+        padding-top:
+            max(env(safe-area-inset-top, 0px), 59px);
+        padding-bottom:
+            max(env(safe-area-inset-bottom, 0px), 16px);
+    }
+}
