@@ -81,14 +81,17 @@ export async function collectMailbox(
     return stored;
 }
 
+
 export async function forwardPending(
     store,
     {
         backendUrl,
         gatewaySecret,
         fetchImpl = fetch,
+        onFailure = () => {},
     }
 ) {
+
     if (
         typeof gatewaySecret !== 'string' ||
         gatewaySecret.length < 32
@@ -151,12 +154,21 @@ export async function forwardPending(
 
             store.markDelivered(item.id);
             delivered += 1;
+
         } catch (error) {
-            store.recordFailure(
-                item.id,
-                error.message ?? 'Unknown delivery error'
-            );
+            const reason =
+                error instanceof Error
+                    ? error.message
+                    : String(error);
+
+            store.recordFailure(item.id, reason);
+
+            onFailure({
+                id: item.id,
+                reason,
+            });
         }
+
     }
 
     return delivered;

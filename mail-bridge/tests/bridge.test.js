@@ -223,3 +223,42 @@ test('mail survives outage and reaches real backend', async (t) => {
         1
     );
 });
+
+
+test('forwarding reports a rejected backend request', async () => {
+    const store = createMailStore(':memory:');
+
+    try {
+        const packet = makePacket();
+
+        store.enqueue(packet);
+
+        const failures = [];
+
+        const delivered = await forwardPending(store, {
+            backendUrl: 'http://127.0.0.1:5100',
+            gatewaySecret:
+                'test-gateway-key-0123456789-abcdefghij',
+
+            fetchImpl: async () => ({
+                ok: false,
+                status: 401,
+            }),
+
+            onFailure(failure) {
+                failures.push(failure);
+            },
+        });
+
+        assert.equal(delivered, 0);
+        assert.equal(store.countPending(), 1);
+
+        assert.equal(failures.length, 1);
+        assert.match(
+            failures[0].reason,
+            /Backend HTTP 401/
+        );
+    } finally {
+        store.close();
+    }
+});

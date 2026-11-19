@@ -40,6 +40,7 @@ if (missing.length > 0) {
 }
 
 const store = createMailStore();
+const lastFailureLog = new Map();
 const controller = new AbortController();
 const signal = controller.signal;
 
@@ -161,13 +162,30 @@ async function main() {
         await runBridgeWorkers({
             poll: imapEnabled ? pollMailbox : null,
 
+
             forward: () =>
                 forwardPending(store, {
                     backendUrl:
                     process.env.CAMPLINK_BACKEND_URL,
                     gatewaySecret:
                     process.env.CAMPLINK_EMAIL_GATEWAY_SECRET,
+
+                    onFailure({ id, reason }) {
+                        const now = Date.now();
+                        const previous = lastFailureLog.get(id) ?? 0;
+
+                        // Report an error at most once per 30 seconds
+                        // to avoid flooding the terminal.
+                        if (now - previous >= 30000) {
+                            console.error(
+                                `Mail Bridge packet #${id}: ${reason}`
+                            );
+
+                            lastFailureLog.set(id, now);
+                        }
+                    },
                 }),
+
 
             pollIntervalMs: Math.max(
                 10000,
