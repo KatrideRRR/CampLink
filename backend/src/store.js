@@ -99,6 +99,22 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
 
     CREATE INDEX IF NOT EXISTS idx_messages_recipient
       ON messages(recipient_id, sender_id, id);
+
+    CREATE TABLE IF NOT EXISTS push_devices (
+      provider TEXT NOT NULL,
+      token TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      session_hash TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (provider, token),
+      FOREIGN KEY (user_id)
+        REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (session_hash)
+        REFERENCES sessions(token_hash) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_push_devices_user
+      ON push_devices(user_id);
   `);
 
     const messageColumns = db.pragma(
@@ -244,6 +260,50 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             db.prepare(
                 'DELETE FROM sessions WHERE token_hash = ?'
             ).run(hashToken(token));
+        },
+
+        registerPushDevice(userId, sessionToken, token) {
+            const sessionHash = hashToken(sessionToken);
+            const session = db.prepare(`
+                SELECT user_id
+                FROM sessions
+                WHERE token_hash = ?
+                  AND expires_at > ?
+            `).get(sessionHash, Date.now());
+
+            if (!session || session.user_id !== userId) {
+                throw new Error('Invalid push session');
+            }
+
+            db.prepare(`
+                INSERT INTO push_devices (
+                    provider, token, user_id,
+                    session_hash, updated_at
+                )
+                VALUES ('apns', ?, ?, ?, ?)
+                ON CONFLICT(provider, token)
+                DO UPDATE SET
+                    user_id = excluded.user_id,
+                    session_hash = excluded.session_hash,
+                    updated_at = excluded.updated_at
+            `).run(
+                token,
+                userId,
+                sessionHash,
+                new Date().toISOString()
+            );
+        },
+
+        getPushDevices(userId) {
+            return db.prepare(`
+                SELECT p.provider, p.token
+                FROM push_devices p
+                JOIN sessions s
+                  ON s.token_hash = p.session_hash
+                WHERE p.user_id = ?
+                  AND s.expires_at > ?
+                ORDER BY p.updated_at DESC
+            `).all(userId, Date.now());
         },
 
         listUsers(excludeId) {

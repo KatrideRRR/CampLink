@@ -269,6 +269,42 @@ export function createAppServer(options = {}) {
         res.json({ user: req.user });
     });
 
+    app.post('/api/push/devices', requireAuth, (req, res) => {
+        const origin = req.get('origin');
+
+        if (origin && !allowedOrigins.includes(origin)) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
+
+        const { provider, token } = req.body ?? {};
+
+        if (
+            provider !== 'apns' ||
+            typeof token !== 'string' ||
+            !/^[a-f0-9]{64}$/i.test(token)
+        ) {
+            return res.status(400).json({
+                error: 'Invalid push device',
+            });
+        }
+
+        try {
+            store.registerPushDevice(
+                req.user.id,
+                req.sessionToken,
+                token.toLowerCase()
+            );
+
+            return res.sendStatus(204);
+        } catch {
+            return res.status(401).json({
+                error: 'Invalid session',
+            });
+        }
+    });
+
     app.get('/api/relay/credential', requireAuth, (req, res) => {
         const secret =
             options.relayTokenSecret ??

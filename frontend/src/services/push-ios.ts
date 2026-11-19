@@ -23,11 +23,37 @@ export function observePushRegistration(
     const subscriptions = Promise.all([
         PushNotifications.addListener(
             'registration',
-            (token) => {
-                if (!disposed) {
-                    onStatus(
-                        token.value ? 'registered' : 'error'
+            async (token) => {
+                if (!token.value) {
+                    if (!disposed) onStatus('error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(
+                        '/api/push/devices',
+                        {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                provider: 'apns',
+                                token: token.value,
+                            }),
+                        }
                     );
+
+                    if (!response.ok) {
+                        throw new Error(
+                            'Device registration failed'
+                        );
+                    }
+
+                    if (!disposed) onStatus('registered');
+                } catch {
+                    if (!disposed) onStatus('error');
                 }
             }
         ),

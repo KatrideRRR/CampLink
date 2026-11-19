@@ -969,7 +969,7 @@ function App() {
                             }
                         >
                             {pushStatus === 'registered'
-                                ? 'Push включён'
+                                ? 'Устройство зарегистрировано'
                                 : pushStatus === 'requesting'
                                     ? 'Подключаем…'
                                     : pushStatus === 'denied'
