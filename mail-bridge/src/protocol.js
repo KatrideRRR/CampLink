@@ -6,7 +6,7 @@ import {
 
 export const MAIL_SUBJECT = 'CampLink Packet v1';
 
-function validatePacket(packet) {
+export function validatePacket(packet) {
     if (!packet || typeof packet !== 'object') {
         throw new Error('Invalid packet');
     }

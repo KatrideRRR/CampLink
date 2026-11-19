@@ -210,3 +210,31 @@ test('does not modify the original transport list', async () => {
     assert.equal(list[0].id, 'backup');
     assert.equal(list[1].id, 'primary');
 });
+
+
+test('relay acceptance is not final delivery', async () => {
+    const relay = {
+        id: 'secondary-relay',
+        kind: 'relay',
+        priority: 20,
+
+        async isAvailable() {
+            return true;
+        },
+
+        async send() {
+            return {
+                ok: true,
+                queued: true,
+            };
+        },
+    };
+
+    const result = await deliverMessage(
+        packet,
+        [relay]
+    );
+
+    assert.equal(result.status, 'relayed');
+    assert.equal(result.transportId, 'secondary-relay');
+});

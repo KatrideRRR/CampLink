@@ -6,6 +6,9 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { createStore } from './store.js';
+import {
+    issueRelayTicket,
+} from '../../shared/relay-ticket.js';
 
 const COOKIE_NAME = 'camplink_session';
 const SESSION_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -264,6 +267,30 @@ export function createAppServer(options = {}) {
 
     app.get('/api/auth/me', requireAuth, (req, res) => {
         res.json({ user: req.user });
+    });
+
+    app.get('/api/relay/credential', requireAuth, (req, res) => {
+        const secret =
+            options.relayTokenSecret ??
+            process.env.CAMPLINK_RELAY_TOKEN_SECRET;
+
+        if (
+            typeof secret !== 'string' ||
+            secret.length < 32
+        ) {
+            return res.status(503).json({
+                error: 'Relay is not configured',
+            });
+        }
+
+        const credential = issueRelayTicket(
+            req.user.id,
+            secret
+        );
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.json(credential);
     });
 
     app.post('/api/auth/logout', requireAuth, (req, res) => {

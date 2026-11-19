@@ -22,6 +22,12 @@ import {
     saveOfflineMessages,
     saveOfflineUser,
 } from './services/offline';
+import {
+    clearRelayCredential,
+    createRelayTransport,
+    saveRelayCredential,
+    type RelayCredential,
+} from './services/relay';
 import { deliverMessage } from './services/delivery';
 import type { MessageTransport } from './services/transports';
 import { buildChatTimeline } from './services/timeline';
@@ -294,6 +300,35 @@ function App() {
         const socket = connectToServer(setConnected);
         socketRef.current = socket;
 
+        const relayTransport = createRelayTransport(
+            me.id,
+            import.meta.env.VITE_CAMPLINK_RELAY_URL ?? ''
+        );
+
+        const relayedInSession = new Set<string>();
+
+        async function refreshRelayCredential() {
+            try {
+                const response = await fetch(
+                    '/api/relay/credential',
+                    { cache: 'no-store' }
+                );
+
+                if (!response.ok) return;
+
+                const credential =
+                    await response.json() as RelayCredential;
+
+                if (active) {
+                    saveRelayCredential(me.id, credential);
+                }
+            } catch {
+                // Existing credential stays available offline.
+            }
+        }
+
+        void refreshRelayCredential();
+
         const internetTransport: MessageTransport = {
             id: 'primary-internet',
             kind: 'internet',
@@ -341,25 +376,34 @@ function App() {
         let flushing = false;
 
         async function drainQueue() {
-            if (
-                !active ||
-                flushing ||
-                !socket.connected
-            ) {
+            if (!active || flushing) {
                 return;
             }
 
             flushing = true;
 
             try {
-                while (active && socket.connected) {
-                    const next = readOutbox(me.id)[0];
+
+                while (active) {
+                    const next = readOutbox(me.id).find(
+                        (message) =>
+                            socket.connected ||
+                            !relayedInSession.has(message.clientMessageId)
+                    );
 
                     if (!next) break;
 
                     const result = await deliverMessage(next, [
                         internetTransport,
+                        relayTransport,
                     ]);
+
+                    if (!active) break;
+
+                    if (result.status === 'relayed') {
+                        relayedInSession.add(next.clientMessageId);
+                        continue;
+                    }
 
                     if (result.status !== 'sent') {
                         if (result.status === 'rejected') {
@@ -472,6 +516,8 @@ function App() {
         });
 
         socket.on('connect', () => {
+            relayedInSession.clear();
+            void refreshRelayCredential();
             setOfflinePreview(false);
             void drainQueue();
             const peerId = selectedPeerRef.current;
@@ -512,6 +558,7 @@ function App() {
             if (!active) return;
 
             clearOfflineCache(me.id);
+            clearRelayCredential(me.id);
             setMe(null);
             setPeers([]);
             setMessages([]);
@@ -521,9 +568,7 @@ function App() {
         });
 
         const retryTimer = window.setInterval(() => {
-            if (socket.connected) {
-                void drainQueue();
-            }
+            void drainQueue();
         }, 10000);
 
         return () => {
@@ -629,6 +674,7 @@ function App() {
         }
         if (me) {
             clearOfflineCache(me.id);
+            clearRelayCredential(me.id);
         }
         setPendingMessages([]);
         socketRef.current?.disconnect();

@@ -14,6 +14,11 @@ export type DeliveryResult =
     message: DeliveredMessage;
 }
     | {
+    status: 'relayed';
+    channel: TransportKind;
+    transportId: string;
+}
+    | {
     status: 'queued';
     error: string;
 }
@@ -50,6 +55,14 @@ export async function deliverMessage(
                     error:
                         response.error ??
                         'Message rejected by server',
+                };
+            }
+
+            if (response.queued === true) {
+                return {
+                    status: 'relayed',
+                    channel: transport.kind,
+                    transportId: transport.id,
                 };
             }
 

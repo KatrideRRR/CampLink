@@ -3,6 +3,7 @@ import type { QueuedMessage } from './outbox';
 
 export type TransportKind =
     | 'internet'
+    | 'relay'
     | 'email'
     | 'sms'
     | 'mesh';
@@ -20,6 +21,7 @@ export type DeliveredMessage = {
 
 export type TransportResponse = {
     ok: boolean;
+    queued?: boolean;
     message?: DeliveredMessage;
     error?: string;
 };

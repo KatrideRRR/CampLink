@@ -6,6 +6,9 @@ import {
     collectMailbox,
     forwardPending,
 } from './bridge.js';
+import {
+    createRelayServer,
+} from './relay-server.js';
 
 const required = [
     'CAMPLINK_IMAP_HOST',
@@ -29,6 +32,39 @@ if (missing.length > 0) {
 }
 
 const store = createMailStore();
+
+const relaySecret =
+    process.env.CAMPLINK_RELAY_TOKEN_SECRET;
+
+if (relaySecret && relaySecret.length >= 32) {
+    const allowedOrigins = (
+        process.env.CAMPLINK_RELAY_ALLOWED_ORIGINS ??
+        'http://127.0.0.1:5173,http://localhost:5173'
+    )
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+    const relayServer = createRelayServer({
+        store,
+        secret: relaySecret,
+        allowedOrigins,
+    });
+
+    const relayPort = Number(
+        process.env.CAMPLINK_RELAY_PORT || 5200
+    );
+
+    const relayHost =
+        process.env.CAMPLINK_RELAY_HOST ??
+        '127.0.0.1';
+
+    relayServer.listen(relayPort, relayHost, () => {
+        console.log(
+            `CampLink Relay: http://${relayHost}:${relayPort}`
+        );
+    });
+}
 
 const intervalSeconds = Math.max(
     10,
