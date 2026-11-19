@@ -262,7 +262,7 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             ).run(hashToken(token));
         },
 
-        registerPushDevice(userId, sessionToken, token) {
+        registerPushDevice(userId, sessionToken, token, provider = 'apns') {
             const sessionHash = hashToken(sessionToken);
             const session = db.prepare(`
                 SELECT user_id
@@ -280,13 +280,14 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                     provider, token, user_id,
                     session_hash, updated_at
                 )
-                VALUES ('apns', ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(provider, token)
                 DO UPDATE SET
                     user_id = excluded.user_id,
                     session_hash = excluded.session_hash,
                     updated_at = excluded.updated_at
             `).run(
+                provider,
                 token,
                 userId,
                 sessionHash,

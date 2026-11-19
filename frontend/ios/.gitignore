@@ -23,3 +23,5 @@ xcuserdata/
 *.cer
 App/App/public/
 App/App/capacitor.config.json
+# Local Firebase iOS configuration
+App/App/GoogleService-Info.plist

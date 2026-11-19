@@ -1,4 +1,5 @@
 
+/// <reference types="@capacitor-firebase/messaging" />
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const testServerUrl =
@@ -21,6 +22,21 @@ const config: CapacitorConfig = {
     plugins: {
         Keyboard: {
             resize: 'native',
+        },
+        FirebaseMessaging: {
+            presentationOptions: [],
+        },
+    },
+
+    experimental: {
+        ios: {
+            spm: {
+                packageOptions: {
+                    '@capacitor-firebase/messaging': {
+                        symlink: true,
+                    },
+                },
+            },
         },
     },
 

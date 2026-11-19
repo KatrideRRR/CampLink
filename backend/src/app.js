@@ -280,11 +280,17 @@ export function createAppServer(options = {}) {
 
         const { provider, token } = req.body ?? {};
 
-        if (
-            provider !== 'apns' ||
-            typeof token !== 'string' ||
-            !/^[a-f0-9]{64}$/i.test(token)
-        ) {
+        const validApns =
+            provider === 'apns' &&
+            typeof token === 'string' &&
+            /^[a-f0-9]{64}$/i.test(token);
+
+        const validFcm =
+            provider === 'fcm' &&
+            typeof token === 'string' &&
+            /^[A-Za-z0-9:_-]{20,2048}$/.test(token);
+
+        if (!validApns && !validFcm) {
             return res.status(400).json({
                 error: 'Invalid push device',
             });
@@ -294,7 +300,8 @@ export function createAppServer(options = {}) {
             store.registerPushDevice(
                 req.user.id,
                 req.sessionToken,
-                token.toLowerCase()
+                validApns ? token.toLowerCase() : token,
+                provider
             );
 
             return res.sendStatus(204);

@@ -1,6 +1,5 @@
-
 import { Capacitor } from '@capacitor/core';
-import { PushNotifications } from '@capacitor/push-notifications';
+import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 
 export type PushStatus =
     | 'off'
@@ -13,6 +12,28 @@ export const isNativeIos =
     Capacitor.isNativePlatform() &&
     Capacitor.getPlatform() === 'ios';
 
+async function saveToken(token: string): Promise<void> {
+    if (!token) {
+        throw new Error('Empty FCM token');
+    }
+
+    const response = await fetch('/api/push/devices', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            provider: 'fcm',
+            token,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error('FCM device registration failed');
+    }
+}
+
 export function observePushRegistration(
     onStatus: (status: PushStatus) => void
 ): () => void {
@@ -20,84 +41,51 @@ export function observePushRegistration(
 
     let disposed = false;
 
-    const subscriptions = Promise.all([
-        PushNotifications.addListener(
-            'registration',
-            async (token) => {
-                if (!token.value) {
-                    if (!disposed) onStatus('error');
-                    return;
+    const subscription = FirebaseMessaging.addListener(
+        'tokenReceived',
+        async ({ token }) => {
+            if (!token || disposed) return;
+
+            try {
+                await saveToken(token);
+
+                if (!disposed) {
+                    onStatus('registered');
                 }
-
-                try {
-                    const response = await fetch(
-                        '/api/push/devices',
-                        {
-                            method: 'POST',
-                            credentials: 'same-origin',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                provider: 'apns',
-                                token: token.value,
-                            }),
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error(
-                            'Device registration failed'
-                        );
-                    }
-
-                    if (!disposed) onStatus('registered');
-                } catch {
-                    if (!disposed) onStatus('error');
-                }
-            }
-        ),
-        PushNotifications.addListener(
-            'registrationError',
-            (event) => {
-                console.warn(
-                    'APNs registration failed',
-                    event.error
-                );
-
+            } catch {
                 if (!disposed) {
                     onStatus('error');
                 }
             }
-        ),
-    ]);
+        }
+    );
 
     return () => {
         disposed = true;
 
-        void subscriptions.then((handles) =>
-            Promise.all(
-                handles.map((handle) => handle.remove())
-            )
-        ).catch(() => {});
+        void subscription
+            .then((listener) => listener.remove())
+            .catch(() => {});
     };
 }
 
 export async function registerIosPush():
-    Promise<'requesting' | 'denied'> {
+    Promise<'registered' | 'denied'> {
     let permission =
-        await PushNotifications.checkPermissions();
+        await FirebaseMessaging.checkPermissions();
 
     if (permission.receive === 'prompt') {
         permission =
-            await PushNotifications.requestPermissions();
+            await FirebaseMessaging.requestPermissions();
     }
 
     if (permission.receive !== 'granted') {
         return 'denied';
     }
 
-    await PushNotifications.register();
+    const result = await FirebaseMessaging.getToken();
 
-    return 'requesting';
+    await saveToken(result.token);
+
+    return 'registered';
 }
