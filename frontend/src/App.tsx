@@ -33,6 +33,10 @@ import {
     type PushStatus,
 } from './services/push-ios';
 import {
+    backupIosSnapshot,
+    clearIosSnapshot,
+} from './services/native-cache';
+import {
     clearRelayCredential,
     createRelayTransport,
     saveRelayCredential,
@@ -185,6 +189,41 @@ function App() {
     const [loading, setLoading] = useState(true);
     const [offlinePreview, setOfflinePreview] = useState(false);
     const [me, setMe] = useState<User | null>(null);
+
+    useEffect(() => {
+        if (!me || !Capacitor.isNativePlatform()) {
+            return;
+        }
+
+        let confirmed = false;
+
+        const save = () => {
+            void backupIosSnapshot(me.id)
+                .then((saved) => {
+                    if (saved && !confirmed) {
+                        confirmed = true;
+                        console.info(
+                            '[CampLink] Native chat cache saved'
+                        );
+                    }
+                })
+                .catch((error) => {
+                    console.warn(
+                        '[CampLink] Cache backup failed',
+                        error
+                    );
+                });
+        };
+
+        save();
+
+        const timer = window.setInterval(save, 3000);
+
+        return () => {
+            window.clearInterval(timer);
+        };
+    }, [me]);
+
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
@@ -846,6 +885,7 @@ function App() {
         if (me) {
             clearOfflineCache(me.id);
             clearRelayCredential(me.id);
+            await clearIosSnapshot();
         }
         setPendingMessages([]);
         socketRef.current?.disconnect();
