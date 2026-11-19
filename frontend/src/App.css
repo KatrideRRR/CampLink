@@ -528,3 +528,76 @@ button:disabled {
     background: #fff2d9;
     color: #7b5113;
 }
+
+
+/* CampLink — mobile layout and iPhone safe areas */
+
+@media (max-width: 650px) {
+    .sidebar {
+        width: 68px;
+        min-width: 68px;
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    .chat {
+        min-width: 0;
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    .sidebar-header {
+        padding: 10px 6px;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .sidebar-actions {
+        justify-content: center;
+        gap: 0;
+    }
+
+    .brand {
+        gap: 0;
+    }
+
+    .brand-icon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .contact {
+        justify-content: center;
+        padding: 10px 4px;
+    }
+
+    .contact .avatar {
+        width: 40px;
+        height: 40px;
+    }
+
+    .chat-header {
+        min-height: 60px;
+        padding: 10px 12px;
+    }
+
+    .offline-banner {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .message-list {
+        min-height: 0;
+        padding: 12px;
+    }
+
+    .composer {
+        padding:
+                10px
+                8px
+                calc(10px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .composer input {
+        font-size: 16px;
+    }
+}
