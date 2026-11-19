@@ -24,13 +24,16 @@ const config: CapacitorConfig = {
         },
     },
 
-    ...(testServerUrl
+    server: testServerUrl
         ? {
-            server: {
-                url: testServerUrl,
-            },
+            url: testServerUrl,
+            errorPath: 'offline-shell.html',
         }
-        : {}),
+        : {
+            appStartPath: '/offline-shell.html',
+            allowNavigation: ['chat.camplink.ru'],
+            errorPath: 'offline-shell.html',
+        },
 };
 
 export default config;
