@@ -25,6 +25,12 @@ import {
     saveOfflineUser,
 } from './services/offline';
 import {
+    isNativeIos,
+    observePushRegistration,
+    registerIosPush,
+    type PushStatus,
+} from './services/push-ios';
+import {
     clearRelayCredential,
     createRelayTransport,
     saveRelayCredential,
@@ -140,6 +146,25 @@ function App() {
             media.removeEventListener('change', applyTheme);
         };
     }, [themePreference]);
+
+    const [pushStatus, setPushStatus] =
+        useState<PushStatus>('off');
+
+    useEffect(() => {
+        return observePushRegistration(setPushStatus);
+    }, []);
+
+    async function enableIosPush() {
+        setPushStatus('requesting');
+
+        try {
+            const result = await registerIosPush();
+            setPushStatus(result);
+        } catch (error) {
+            console.error('APNs setup failed', error);
+            setPushStatus('error');
+        }
+    }
 
     function cycleTheme() {
         const next = nextThemePreference(themePreference);
@@ -932,6 +957,29 @@ function App() {
 
                 <div className="account">
                     <span>@{me.username}</span>
+
+                    {isNativeIos && (
+                        <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => void enableIosPush()}
+                            disabled={
+                                pushStatus === 'requesting' ||
+                                pushStatus === 'registered'
+                            }
+                        >
+                            {pushStatus === 'registered'
+                                ? 'Push включён'
+                                : pushStatus === 'requesting'
+                                    ? 'Подключаем…'
+                                    : pushStatus === 'denied'
+                                        ? 'Push запрещён'
+                                        : pushStatus === 'error'
+                                            ? 'Ошибка Push'
+                                            : 'Включить Push'}
+                        </button>
+                    )}
+
                     <button
                         type="button"
                         onClick={handleLogout}
