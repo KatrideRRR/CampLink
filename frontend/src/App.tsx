@@ -13,6 +13,7 @@ import {
     removeOutboxMessage,
     type QueuedMessage,
 } from './services/outbox';
+import { observeIosLifecycle } from './services/ios-native';
 import {
     clearOfflineCache,
     decideSession,
@@ -197,6 +198,18 @@ function App() {
     const drainQueueRef = useRef<() => void>(() => {});
     const selectedPeerRef = useRef<number | null>(null);
     const messageListRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        return observeIosLifecycle(() => {
+            const socket = socketRef.current;
+
+            if (socket && !socket.connected) {
+                socket.connect();
+            }
+
+            drainQueueRef.current();
+        });
+    }, []);
 
     const selectedPeer =
         peers.find((peer) => peer.id === selectedPeerId) ??

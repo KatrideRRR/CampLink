@@ -18,6 +18,12 @@ const config: CapacitorConfig = {
     appName: 'CampLink',
     webDir: 'dist',
 
+    plugins: {
+        Keyboard: {
+            resize: 'native',
+        },
+    },
+
     ...(testServerUrl
         ? {
             server: {

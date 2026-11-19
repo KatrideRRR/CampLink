@@ -689,3 +689,36 @@ body {
     padding-bottom:
         max(env(safe-area-inset-bottom, 0px), 16px);
 }
+
+
+/* iOS keyboard and actual visible viewport */
+
+.messenger {
+    top: var(--camplink-viewport-top, 0px);
+    height: var(
+            --camplink-viewport-height,
+            100dvh
+    );
+}
+
+.login-page {
+    height: var(
+            --camplink-viewport-height,
+            100dvh
+    );
+}
+
+:root.camplink-keyboard-open
+.messenger.is-mobile {
+    padding-bottom: 0;
+}
+
+.messenger.is-mobile .composer {
+    position: relative;
+    z-index: 2;
+}
+
+.messenger.is-mobile .message-list {
+    min-height: 0;
+    flex: 1 1 auto;
+}
