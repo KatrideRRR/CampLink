@@ -1,0 +1,12 @@
+
+relay.example.com {
+    @relay path /health /v1/messages
+
+    handle @relay {
+        reverse_proxy 127.0.0.1:5200
+    }
+
+    handle {
+        respond "Not found" 404
+    }
+}

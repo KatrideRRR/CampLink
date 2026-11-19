@@ -1,0 +1,32 @@
+
+[Unit]
+Description=CampLink Independent Relay
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=camplink
+Group=camplink
+
+WorkingDirectory=/opt/camplink/mail-bridge
+
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/camplink/relay.env
+
+ExecStart=/usr/bin/node /opt/camplink/mail-bridge/src/index.js
+
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/camplink/mail-bridge/data
+
+UMask=0077
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
