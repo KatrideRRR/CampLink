@@ -229,7 +229,12 @@ function App() {
                 window.requestAnimationFrame(() => {
                     const list = messageListRef.current;
                     if (list) {
-                        list.scrollTop = list.scrollHeight;
+                        list.scrollTo({
+                        top: list.scrollHeight,
+                        behavior: window.matchMedia(
+                            '(prefers-reduced-motion: reduce)'
+                        ).matches ? 'auto' : 'smooth',
+                    });
                     }
                 });
             });
@@ -712,7 +717,12 @@ function App() {
         const list = messageListRef.current;
 
         if (list) {
-            list.scrollTop = list.scrollHeight;
+            list.scrollTo({
+                        top: list.scrollHeight,
+                        behavior: window.matchMedia(
+                            '(prefers-reduced-motion: reduce)'
+                        ).matches ? 'auto' : 'smooth',
+                    });
         }
     }, [
         messages,
