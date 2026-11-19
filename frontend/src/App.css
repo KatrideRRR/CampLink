@@ -316,41 +316,8 @@ button:disabled {
     padding: 8px 22px;
 }
 
-@media (max-width: 650px) {
-    .sidebar {
-        width: 105px;
-    }
 
-    .sidebar-header {
-        padding: 16px;
-    }
 
-    .brand strong,
-    .account,
-    .section-heading,
-    .contact-info,
-    .empty-contacts {
-        display: none;
-    }
-
-    .contact {
-        justify-content: center;
-        padding: 12px;
-    }
-
-    .message-list {
-        padding: 14px;
-    }
-
-    .composer {
-        padding: 10px;
-    }
-
-    .composer button {
-        padding: 12px;
-        font-size: 12px;
-    }
-}
 
 
 /* Theme switcher */
@@ -472,25 +439,8 @@ button:disabled {
 
 /* Compact mobile sidebar */
 
-@media (max-width: 650px) {
-    .sidebar-header {
-        padding: 10px;
-        gap: 4px;
-    }
 
-    .sidebar-actions {
-        gap: 4px;
-    }
 
-    .sidebar-header .connection-indicator {
-        display: none;
-    }
-
-    .sidebar-header .theme-button {
-        width: 30px;
-        height: 30px;
-    }
-}
 
 
 /* Pending message */
@@ -532,75 +482,8 @@ button:disabled {
 
 /* CampLink — mobile layout and iPhone safe areas */
 
-@media (max-width: 650px) {
-    .sidebar {
-        width: 68px;
-        min-width: 68px;
-        padding-top: env(safe-area-inset-top, 0px);
-    }
 
-    .chat {
-        min-width: 0;
-        padding-top: env(safe-area-inset-top, 0px);
-    }
 
-    .sidebar-header {
-        padding: 10px 6px;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .sidebar-actions {
-        justify-content: center;
-        gap: 0;
-    }
-
-    .brand {
-        gap: 0;
-    }
-
-    .brand-icon {
-        width: 40px;
-        height: 40px;
-    }
-
-    .contact {
-        justify-content: center;
-        padding: 10px 4px;
-    }
-
-    .contact .avatar {
-        width: 40px;
-        height: 40px;
-    }
-
-    .chat-header {
-        min-height: 60px;
-        padding: 10px 12px;
-    }
-
-    .offline-banner {
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-
-    .message-list {
-        min-height: 0;
-        padding: 12px;
-    }
-
-    .composer {
-        padding:
-                10px
-                8px
-                calc(10px + env(safe-area-inset-bottom, 0px));
-    }
-
-    .composer input {
-        font-size: 16px;
-    }
-}
 
 
 /* CampLink: full-screen mobile navigation */
@@ -618,170 +501,191 @@ button:disabled {
     cursor: pointer;
 }
 
-@media (max-width: 650px) {
-    html,
-    body,
-    #root {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #111317;
-    }
 
-    :root[data-theme='light'],
-    :root[data-theme='light'] body,
-    :root[data-theme='light'] #root {
-        background: #ffffff;
-    }
 
-    .messenger {
-        display: flex;
-        width: 100%;
-        height: 100dvh;
-        min-height: 0;
-        overflow: hidden;
-        box-sizing: border-box;
-        padding-top: env(safe-area-inset-top, 0px);
-        padding-bottom: env(safe-area-inset-bottom, 0px);
-        background: #111317;
-    }
-
-    :root[data-theme='light'] .messenger {
-        background: #ffffff;
-    }
-
-    .sidebar,
-    .chat {
-        width: 100%;
-        min-width: 0;
-        min-height: 0;
-        height: 100%;
-        flex: 1 1 auto;
-        padding-top: 0;
-    }
-
-    .messenger.mobile-chat-open .sidebar,
-    .messenger.mobile-contacts-open .chat {
-        display: none;
-    }
-
-    .sidebar-header {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        padding: 12px 16px;
-        gap: 12px;
-        flex-shrink: 0;
-    }
-
-    .brand {
-        gap: 12px;
-    }
-
-    .brand strong {
-        display: block;
-    }
-
-    .sidebar-actions {
-        gap: 10px;
-    }
-
-    .account {
-        display: flex;
-        padding: 0 16px 12px;
-    }
-
-    .section-heading {
-        display: block;
-        padding: 12px 16px;
-    }
-
-    .contact-list {
-        flex: 1;
-        min-height: 0;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .contact {
-        justify-content: flex-start;
-        gap: 12px;
-        padding: 12px 16px;
-    }
-
-    .contact-info {
-        display: flex;
-        min-width: 0;
-    }
-
-    .contact-info strong {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .empty-contacts {
-        display: block;
-    }
-
-    .chat-header {
-        flex-shrink: 0;
-        min-height: 58px;
-        padding: 8px 12px;
-        gap: 8px;
-    }
-
-    .mobile-back {
-        display: inline-flex;
-        flex-shrink: 0;
-    }
-
-    .message-list {
-        min-height: 0;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        -webkit-overflow-scrolling: touch;
-        padding: 12px;
-    }
-
-    .offline-banner {
-        flex-shrink: 0;
-        padding: 8px 12px;
-    }
-
-    .composer {
-        flex-shrink: 0;
-        padding: 10px 10px 12px;
-        gap: 8px;
-    }
-
-    .composer input {
-        font-size: 16px;
-    }
-
-    .composer button {
-        padding: 12px;
-    }
-
-    .login-page {
-        min-height: 100dvh;
-        padding-top:
-            calc(24px + env(safe-area-inset-top, 0px));
-        padding-bottom:
-            calc(24px + env(safe-area-inset-bottom, 0px));
-    }
-}
 
 /*
  * Temporary native iPhone fallback.
  * This protects the header when WKWebView reports
  * zero safe-area insets in remote test mode.
  */
-@media (max-width: 650px) {
-    :root.camplink-native-ios .messenger {
-        padding-top:
-            max(env(safe-area-inset-top, 0px), 59px);
-        padding-bottom:
-            max(env(safe-area-inset-bottom, 0px), 16px);
-    }
+
+
+
+
+/* CampLink — unified mobile layout */
+
+html,
+body,
+#root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+body {
+    position: fixed;
+    inset: 0;
+}
+
+#root {
+    min-height: 0;
+}
+
+.messenger {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+.sidebar,
+.chat {
+    min-height: 0;
+}
+
+.contact-list,
+.message-list {
+    min-height: 0;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.login-page {
+    height: 100dvh;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.messenger.is-mobile {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #111317;
+}
+
+:root[data-theme='light'] .messenger.is-mobile {
+    background: #ffffff;
+}
+
+.messenger.is-mobile .sidebar,
+.messenger.is-mobile .chat {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-top: 0;
+}
+
+.messenger.is-mobile.mobile-chat-open .sidebar,
+.messenger.is-mobile.mobile-contacts-open .chat {
+    display: none;
+}
+
+.messenger.is-mobile .sidebar-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    flex-shrink: 0;
+}
+
+.messenger.is-mobile .brand {
+    gap: 12px;
+}
+
+.messenger.is-mobile .brand strong,
+.messenger.is-mobile .account,
+.messenger.is-mobile .section-heading,
+.messenger.is-mobile .contact-info,
+.messenger.is-mobile .empty-contacts {
+    display: revert;
+}
+
+.messenger.is-mobile .account {
+    display: flex;
+    padding: 0 16px 12px;
+}
+
+.messenger.is-mobile .section-heading {
+    display: block;
+    padding: 12px 16px;
+}
+
+.messenger.is-mobile .sidebar-actions {
+    gap: 10px;
+}
+
+.messenger.is-mobile .contact-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.messenger.is-mobile .contact {
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+}
+
+.messenger.is-mobile .contact-info {
+    display: flex;
+    min-width: 0;
+}
+
+.messenger.is-mobile .contact-info strong {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.messenger.is-mobile .chat-header {
+    min-height: 58px;
+    flex-shrink: 0;
+    gap: 8px;
+    padding: 8px 12px;
+}
+
+.messenger.is-mobile .mobile-back {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.messenger.is-mobile .message-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.messenger.is-mobile .offline-banner {
+    flex-shrink: 0;
+    padding: 8px 12px;
+}
+
+.messenger.is-mobile .composer {
+    flex-shrink: 0;
+    padding: 10px 10px 12px;
+    gap: 8px;
+}
+
+.messenger.is-mobile .composer input {
+    font-size: 16px;
+}
+
+.messenger.is-mobile .composer button {
+    padding: 12px;
+}
+
+/* Temporary fallback for iPhone native test builds */
+
+:root.camplink-native-ios .messenger.is-mobile {
+    padding-top:
+        max(env(safe-area-inset-top, 0px), 59px);
+    padding-bottom:
+        max(env(safe-area-inset-bottom, 0px), 16px);
 }

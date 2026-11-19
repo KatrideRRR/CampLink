@@ -5,6 +5,7 @@ import {
     type FormEvent,
 } from 'react';
 import type { Socket } from 'socket.io-client';
+import { Capacitor } from '@capacitor/core';
 import { connectToServer } from './services/connection';
 import {
     enqueueOutboxMessage,
@@ -164,6 +165,27 @@ function App() {
         useState<number | null>(null);
     const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
+    const [mobileView, setMobileView] = useState(
+        () => Capacitor.isNativePlatform() ||
+            window.matchMedia('(max-width: 900px)').matches
+    );
+
+    useEffect(() => {
+        const query = window.matchMedia('(max-width: 900px)');
+
+        const update = () => {
+            setMobileView(
+                Capacitor.isNativePlatform() || query.matches
+            );
+        };
+
+        query.addEventListener('change', update);
+
+        return () => {
+            query.removeEventListener('change', update);
+        };
+    }, []);
+
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
     const [connected, setConnected] = useState(false);
@@ -174,7 +196,7 @@ function App() {
     const socketRef = useRef<Socket | null>(null);
     const drainQueueRef = useRef<() => void>(() => {});
     const selectedPeerRef = useRef<number | null>(null);
-    const chatEndRef = useRef<HTMLDivElement | null>(null);
+    const messageListRef = useRef<HTMLDivElement | null>(null);
 
     const selectedPeer =
         peers.find((peer) => peer.id === selectedPeerId) ??
@@ -634,16 +656,32 @@ function App() {
     }, [me, selectedPeerId]);
 
     useEffect(() => {
-        chatEndRef.current?.scrollIntoView({
-            behavior: 'smooth',
-        });
-    }, [messages, pendingMessages]);
+        const list = messageListRef.current;
+
+        if (list) {
+            list.scrollTop = list.scrollHeight;
+        }
+    }, [
+        messages,
+        pendingMessages,
+        selectedPeerId,
+        mobileChatOpen,
+    ]);
 
     function selectPeer(id: number) {
         setMobileChatOpen(true);
+
+        if (selectedPeerRef.current === id) {
+            return;
+        }
+
         selectedPeerRef.current = id;
         setSelectedPeerId(id);
-        setMessages([]);
+
+        setMessages(
+            me ? readOfflineMessages(me.id, id) : []
+        );
+
         setDraft('');
         setError('');
     }
@@ -786,7 +824,9 @@ function App() {
     }
 
     return (
-        <main className={`messenger ${mobileChatOpen ? 'mobile-chat-open' : 'mobile-contacts-open'}`}>
+        <main className={`messenger ${mobileView ? 'is-mobile' : ''} ${
+            mobileChatOpen ? 'mobile-chat-open' : 'mobile-contacts-open'
+        }`}>
 
             <aside className="sidebar">
                 <div className="sidebar-header">
@@ -895,7 +935,7 @@ function App() {
                             </div>
                         </header>
 
-                        <div className="message-list">
+                        <div className="message-list" ref={messageListRef}>
 
                             {timeline.length === 0 && (
                                 <p className="empty-chat">
@@ -946,7 +986,7 @@ function App() {
                                 );
                             })}
 
-                            <div ref={chatEndRef} />
+                            
                         </div>
 
                         {error && (
