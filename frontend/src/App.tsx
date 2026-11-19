@@ -27,6 +27,8 @@ import {
 import {
     isNativeIos,
     observePushRegistration,
+    observePushNavigation,
+    restoreIosPushRegistration,
     registerIosPush,
     type PushStatus,
 } from './services/push-ios';
@@ -190,6 +192,12 @@ function App() {
     const [selectedPeerId, setSelectedPeerId] =
         useState<number | null>(null);
     const [mobileChatOpen, setMobileChatOpen] = useState(false);
+    const [pendingPushPeerId, setPendingPushPeerId] =
+        useState<number | null>(null);
+
+    useEffect(() => {
+        return observePushNavigation(setPendingPushPeerId);
+    }, []);
 
     const [mobileView, setMobileView] = useState(
         () => Capacitor.isNativePlatform() ||
@@ -226,6 +234,41 @@ function App() {
     const selectedPeerRef = useRef<number | null>(null);
     const messageListRef = useRef<HTMLDivElement | null>(null);
     const composerInputRef = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        if (!me || pendingPushPeerId === null) return;
+
+        if (pendingPushPeerId !== me.id) {
+            selectedPeerRef.current = pendingPushPeerId;
+            setSelectedPeerId(pendingPushPeerId);
+            setMessages(
+                readOfflineMessages(me.id, pendingPushPeerId)
+            );
+            setMobileChatOpen(true);
+        }
+
+        setPendingPushPeerId(null);
+    }, [me, pendingPushPeerId]);
+
+    useEffect(() => {
+        if (!me || !isNativeIos) return;
+
+        let active = true;
+
+        void restoreIosPushRegistration()
+            .then((registered) => {
+                if (active && registered) {
+                    setPushStatus('registered');
+                }
+            })
+            .catch(() => {
+                if (active) setPushStatus('error');
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [me]);
 
     useEffect(() => {
         if (!me || connected) {

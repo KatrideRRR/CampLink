@@ -79,6 +79,54 @@ export function createAppServer(options = {}) {
         },
     });
 
+    function deliverPush(message) {
+        if (typeof options.pushSender !== 'function') {
+            return;
+        }
+
+        try {
+            const tokens = [
+                ...new Set(
+                    store.getPushDevices(message.recipientId)
+                        .filter((device) => device.provider === 'fcm')
+                        .map((device) => device.token)
+                ),
+            ];
+
+            if (tokens.length === 0) return;
+
+            void Promise.resolve()
+                .then(() => options.pushSender({
+                    message,
+                    tokens,
+                }))
+                .then((invalidTokens) => {
+                    if (!Array.isArray(invalidTokens)) return;
+
+                    for (const token of invalidTokens) {
+                        if (!tokens.includes(token)) continue;
+
+                        store.removePushDevice(
+                            message.recipientId,
+                            'fcm',
+                            token
+                        );
+                    }
+                })
+                .catch((error) => {
+                    console.error(
+                        '[FCM] Delivery failed:',
+                        error?.message ?? 'Unknown error'
+                    );
+                });
+        } catch (error) {
+            console.error(
+                '[FCM] Scheduling failed:',
+                error?.message ?? 'Unknown error'
+            );
+        }
+    }
+
     function persistAndBroadcast(payload) {
         const result = store.saveMessage(payload);
 
@@ -86,6 +134,8 @@ export function createAppServer(options = {}) {
             io.to(`user:${payload.senderId}`)
                 .to(`user:${payload.recipientId}`)
                 .emit('chat:new', result.message);
+
+            deliverPush(result.message);
         }
 
         return result;

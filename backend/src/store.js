@@ -307,6 +307,15 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             `).all(userId, Date.now());
         },
 
+        removePushDevice(userId, provider, token) {
+            db.prepare(`
+                DELETE FROM push_devices
+                WHERE user_id = ?
+                  AND provider = ?
+                  AND token = ?
+            `).run(userId, provider, token);
+        },
+
         listUsers(excludeId) {
             return db.prepare(`
         SELECT id, username, created_at AS createdAt

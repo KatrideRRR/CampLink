@@ -89,3 +89,67 @@ export async function registerIosPush():
 
     return 'registered';
 }
+
+
+export function observePushNavigation(
+    onOpenPeer: (peerId: number) => void
+): () => void {
+    if (!isNativeIos) return () => {};
+
+    let disposed = false;
+
+    const subscription = FirebaseMessaging.addListener(
+        'notificationActionPerformed',
+        (event) => {
+            if (disposed) return;
+
+            const data = event.notification.data;
+
+            if (
+                !data ||
+                typeof data !== 'object'
+            ) {
+                return;
+            }
+
+            const value =
+                (data as Record<string, unknown>).peerId;
+
+            if (
+                typeof value !== 'string' ||
+                !/^[1-9][0-9]*$/.test(value)
+            ) {
+                return;
+            }
+
+            const peerId = Number(value);
+
+            if (Number.isSafeInteger(peerId)) {
+                onOpenPeer(peerId);
+            }
+        }
+    );
+
+    return () => {
+        disposed = true;
+        void subscription
+            .then((listener) => listener.remove())
+            .catch(() => {});
+    };
+}
+
+export async function restoreIosPushRegistration():
+    Promise<boolean> {
+    if (!isNativeIos) return false;
+
+    const permission =
+        await FirebaseMessaging.checkPermissions();
+
+    if (permission.receive !== 'granted') {
+        return false;
+    }
+
+    const result = await FirebaseMessaging.getToken();
+    await saveToken(result.token);
+    return true;
+}
