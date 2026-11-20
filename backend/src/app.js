@@ -452,7 +452,37 @@ export function createAppServer(options = {}) {
     io.on('connection', (socket) => {
         const user = socket.data.user;
 
-        socket.join(`user:${user.id}`);
+        const room = `user:${user.id}`;
+        const alreadyOnline = Boolean(
+            io.sockets.adapter.rooms.get(room)?.size
+        );
+
+        socket.join(room);
+
+        const userIds = [
+            ...new Set(
+                [...io.sockets.sockets.values()]
+                    .map(client => client.data.user.id)
+            ),
+        ];
+
+        socket.emit('presence:snapshot', { userIds });
+
+        if (!alreadyOnline) {
+            io.emit('presence:update', {
+                userId: user.id,
+                online: true,
+            });
+        }
+
+        socket.on('disconnect', () => {
+            if (!io.sockets.adapter.rooms.has(room)) {
+                io.emit('presence:update', {
+                    userId: user.id,
+                    online: false,
+                });
+            }
+        });
 
         socket.emit('system:hello', {
             ready: true,

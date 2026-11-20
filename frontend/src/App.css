@@ -722,3 +722,68 @@ body {
     min-height: 0;
     flex: 1 1 auto;
 }
+
+
+/* CampLink chat previews and presence */
+
+.contact-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.contact-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.contact-name-row strong {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.presence-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #65d889;
+    box-shadow: 0 0 7px rgba(101,216,137,.3);
+}
+
+.last-message-preview {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.incoming-toast {
+    position: fixed;
+    z-index: 1000;
+    top: max(16px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(92%, 390px);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 14px 18px;
+    border: 1px solid #42484b;
+    border-radius: 18px;
+    background: #25292d;
+    color: white;
+    text-align: left;
+    box-shadow: 0 12px 40px #0006;
+}
+
+.incoming-toast span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: #d5d8d9;
+}

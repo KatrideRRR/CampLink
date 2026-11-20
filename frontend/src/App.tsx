@@ -268,11 +268,37 @@ function App() {
         useState<QueuedMessage[]>([]);
     const [error, setError] = useState('');
 
+    const [onlineIds, setOnlineIds] =
+        useState<number[]>([]);
+    const [toast, setToast] = useState<{
+        peerId: number;
+        name: string;
+        text: string;
+    } | null>(null);
+
+    const peersRef = useRef<User[]>([]);
+
+    useEffect(() => {
+        peersRef.current = peers;
+    }, [peers]);
+
+    useEffect(() => {
+        if (!toast) return;
+
+        const timer = window.setTimeout(
+            () => setToast(null),
+            4500
+        );
+
+        return () => window.clearTimeout(timer);
+    }, [toast]);
+
     const socketRef = useRef<Socket | null>(null);
     const drainQueueRef = useRef<() => void>(() => {});
     const selectedPeerRef = useRef<number | null>(null);
     const messageListRef = useRef<HTMLDivElement | null>(null);
     const composerInputRef = useRef<HTMLInputElement | null>(null);
+    const forceScrollAfterSendRef = useRef(false);
 
     useEffect(() => {
         if (!me || pendingPushPeerId === null) return;
@@ -376,6 +402,35 @@ function App() {
                 selectedPeerId
             )
             : [];
+
+    function previewFor(peerId: number): string {
+        if (!me) return '';
+
+        const history = readOfflineMessages(
+            me.id, peerId
+        );
+        const confirmed = history.at(-1);
+
+        const queued = pendingMessages
+            .filter(item => item.toUserId === peerId)
+            .at(-1);
+
+        if (
+            queued &&
+            (!confirmed ||
+                Date.parse(queued.createdAt) >=
+                Date.parse(confirmed.createdAt))
+        ) {
+            return `Вы: ${queued.text}`;
+        }
+
+        if (!confirmed) return 'Нет сообщений';
+
+        return (
+            (confirmed.senderId === me.id
+                ? 'Вы: ' : '') + confirmed.text
+        );
+    }
 
     useEffect(() => {
         let active = true;
@@ -655,6 +710,42 @@ function App() {
             void drainQueue();
         };
 
+        socket.on('presence:snapshot', (
+            payload: { userIds?: unknown }
+        ) => {
+            if (!Array.isArray(payload?.userIds)) return;
+
+            setOnlineIds(
+                payload.userIds.filter(
+                    (id): id is number =>
+                        Number.isSafeInteger(id) && id > 0
+                )
+            );
+        });
+
+        socket.on('presence:update', (
+            payload: { userId?: unknown; online?: unknown }
+        ) => {
+            const id = payload?.userId;
+
+            if (
+                typeof id !== 'number' ||
+                !Number.isSafeInteger(id) ||
+                id <= 0 ||
+                typeof payload.online !== 'boolean'
+            ) return;
+
+            setOnlineIds(current =>
+                payload.online
+                    ? [...new Set([...current, id])]
+                    : current.filter(item => item !== id)
+            );
+        });
+
+        socket.on('disconnect', () => {
+            setOnlineIds([]);
+        });
+
         socket.on('chat:new', (message: ChatMessage) => {
 
             const partnerId =
@@ -667,6 +758,29 @@ function App() {
                 partnerId,
                 [message]
             );
+
+            setPeers(current => [...current]);
+
+            if (
+                message.senderId !== me.id &&
+                (
+                    message.senderId !== selectedPeerRef.current ||
+                    document.querySelector(
+                        '.messenger.is-mobile.mobile-contacts-open'
+                    ) !== null
+                ) &&
+                document.visibilityState === 'visible'
+            ) {
+                const sender = peersRef.current.find(
+                    peer => peer.id === message.senderId
+                );
+
+                setToast({
+                    peerId: message.senderId,
+                    name: sender?.username ?? 'Новое сообщение',
+                    text: message.text,
+                });
+            }
 
             if (message.senderId === me.id) {
                 const queued = readOutbox(me.id);
@@ -822,15 +936,31 @@ function App() {
 
     useEffect(() => {
         const list = messageListRef.current;
+        if (!list) return;
 
-        if (list) {
-            list.scrollTo({
-                        top: list.scrollHeight,
-                        behavior: window.matchMedia(
-                            '(prefers-reduced-motion: reduce)'
-                        ).matches ? 'auto' : 'smooth',
-                    });
+        if (forceScrollAfterSendRef.current) {
+            forceScrollAfterSendRef.current = false;
+
+            const scroll = () => {
+                if (messageListRef.current === list) {
+                    list.scrollTop = list.scrollHeight;
+                }
+            };
+
+            scroll();
+            window.requestAnimationFrame(() => {
+                scroll();
+                window.requestAnimationFrame(scroll);
+            });
+            return;
         }
+
+        list.scrollTo({
+            top: list.scrollHeight,
+            behavior: window.matchMedia(
+                '(prefers-reduced-motion: reduce)'
+            ).matches ? 'auto' : 'smooth',
+        });
     }, [
         messages,
         pendingMessages,
@@ -925,6 +1055,7 @@ function App() {
                 }
             );
 
+            forceScrollAfterSendRef.current = true;
             setPendingMessages(pending);
             setDraft('');
             setError('');
@@ -1090,8 +1221,18 @@ function App() {
                 {peer.username[0].toUpperCase()}
               </span>
                             <span className="contact-info">
-                <strong>{peer.username}</strong>
-                <small>ID {peer.id}</small>
+                <span className="contact-name-row">
+                    <strong>{peer.username}</strong>
+                    {onlineIds.includes(peer.id) && (
+                        <span
+                            className="presence-dot"
+                            title="В сети"
+                        />
+                    )}
+                </span>
+                <small className="last-message-preview">
+                    {previewFor(peer.id)}
+                </small>
               </span>
                         </button>
                     ))}
@@ -1130,8 +1271,15 @@ function App() {
                             </div>
 
                             <div>
-                                <strong>{selectedPeer.username}</strong>
-                                <small>ID {selectedPeer.id}</small>
+                                <span className="contact-name-row">
+                                    <strong>{selectedPeer.username}</strong>
+                                    {onlineIds.includes(selectedPeer.id) && (
+                                        <span
+                                            className="presence-dot"
+                                            title="В сети"
+                                        />
+                                    )}
+                                </span>
                             </div>
                         </header>
 
@@ -1226,6 +1374,20 @@ function App() {
                     </div>
                 )}
             </section>
+
+            {toast && (
+                <button
+                    type="button"
+                    className="incoming-toast"
+                    onClick={() => {
+                        selectPeer(toast.peerId);
+                        setToast(null);
+                    }}
+                >
+                    <strong>{toast.name}</strong>
+                    <span>{toast.text}</span>
+                </button>
+            )}
         </main>
     );
 }
