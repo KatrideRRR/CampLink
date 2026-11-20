@@ -17,6 +17,13 @@ export type DeliveredMessage = {
     createdAt: string;
     clientCreatedAt?: string | null;
     serverReceivedAt?: string;
+    replyToMessageId?: number | null;
+    replyToText?: string | null;
+    replyToSenderId?: number | null;
+    reactions?: {
+        userId: number;
+        emoji: string;
+    }[];
 };
 
 export type TransportResponse = {

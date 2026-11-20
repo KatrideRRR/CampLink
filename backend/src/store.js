@@ -116,6 +116,21 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_push_devices_user
       ON push_devices(user_id);
 
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      message_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (message_id, user_id),
+      FOREIGN KEY (message_id)
+        REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id)
+        REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_message_reactions_message
+      ON message_reactions(message_id);
+
     CREATE TABLE IF NOT EXISTS message_reads (
       reader_id INTEGER NOT NULL,
       peer_id INTEGER NOT NULL,
@@ -144,6 +159,18 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
   `);
     }
 
+    const hasReplyTo = messageColumns.some(
+        column => column.name === 'reply_to_message_id'
+    );
+
+    if (!hasReplyTo) {
+        db.exec(`
+            ALTER TABLE messages
+            ADD COLUMN reply_to_message_id INTEGER
+            REFERENCES messages(id)
+        `);
+    }
+
     const selectMessage = db.prepare(`
         SELECT
             id,
@@ -163,10 +190,34 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                 WHERE r.reader_id = messages.recipient_id
                   AND r.peer_id = messages.sender_id
                   AND r.last_read_message_id >= messages.id
-            ) AS readAt
+            ) AS readAt,
+            reply_to_message_id AS replyToMessageId,
+            (
+                SELECT text FROM messages original
+                WHERE original.id = messages.reply_to_message_id
+            ) AS replyToText,
+            (
+                SELECT sender_id FROM messages original
+                WHERE original.id = messages.reply_to_message_id
+            ) AS replyToSenderId
         FROM messages
         WHERE id = ?
     `);
+
+    const listReactions = db.prepare(`
+        SELECT user_id AS userId, emoji
+        FROM message_reactions
+        WHERE message_id = ?
+        ORDER BY user_id
+    `);
+
+    function decorateMessage(row) {
+        if (!row) return null;
+        return {
+            ...row,
+            reactions: listReactions.all(row.id),
+        };
+    }
 
     return {
         createUser(username, password) {
@@ -350,9 +401,37 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                         clientMessageId,
                         text,
                         clientCreatedAt,
+                        replyToMessageId = null,
                     }) {
             const normalizedClientTime =
                 normalizeClientCreatedAt(clientCreatedAt);
+
+            if (replyToMessageId !== null) {
+                if (
+                    !Number.isSafeInteger(replyToMessageId) ||
+                    replyToMessageId <= 0
+                ) {
+                    throw new Error('Invalid reply target');
+                }
+
+                const original = db.prepare(`
+                    SELECT id FROM messages
+                    WHERE id = ?
+                      AND (
+                        (sender_id = ? AND recipient_id = ?)
+                        OR
+                        (sender_id = ? AND recipient_id = ?)
+                      )
+                `).get(
+                    replyToMessageId,
+                    senderId, recipientId,
+                    recipientId, senderId
+                );
+
+                if (!original) {
+                    throw new Error('Reply target not in conversation');
+                }
+            }
 
             const serverReceivedAt =
                 new Date().toISOString();
@@ -364,20 +443,23 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
       client_message_id,
       text,
       created_at,
-      client_created_at
+      client_created_at,
+      reply_to_message_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
                 senderId,
                 recipientId,
                 clientMessageId,
                 text,
                 serverReceivedAt,
-                normalizedClientTime
+                normalizedClientTime,
+                replyToMessageId
             );
 
             const row = db.prepare(`
-    SELECT id, recipient_id, text
+    SELECT id, recipient_id, text,
+           reply_to_message_id AS replyToMessageId
     FROM messages
     WHERE sender_id = ?
       AND client_message_id = ?
@@ -386,14 +468,82 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             if (
                 !row ||
                 row.recipient_id !== recipientId ||
-                row.text !== text
+                row.text !== text ||
+                row.replyToMessageId !== replyToMessageId
             ) {
                 throw new Error('Message ID conflict');
             }
 
             return {
                 created: result.changes === 1,
-                message: selectMessage.get(row.id),
+                message: decorateMessage(
+                    selectMessage.get(row.id)
+                ),
+            };
+        },
+
+        toggleReaction(userId, messageId, emoji) {
+            if (
+                !Number.isSafeInteger(userId) ||
+                !Number.isSafeInteger(messageId) ||
+                !['❤️', '🔥', '💩', '🫡'].includes(emoji)
+            ) {
+                return null;
+            }
+
+            const message = db.prepare(`
+                SELECT sender_id AS senderId,
+                       recipient_id AS recipientId
+                FROM messages
+                WHERE id = ?
+            `).get(messageId);
+
+            if (
+                !message ||
+                (
+                    message.senderId !== userId &&
+                    message.recipientId !== userId
+                )
+            ) {
+                return null;
+            }
+
+            const update = db.transaction(() => {
+                const previous = db.prepare(`
+                    SELECT emoji FROM message_reactions
+                    WHERE message_id = ? AND user_id = ?
+                `).get(messageId, userId);
+
+                if (previous?.emoji === emoji) {
+                    db.prepare(`
+                        DELETE FROM message_reactions
+                        WHERE message_id = ? AND user_id = ?
+                    `).run(messageId, userId);
+                } else {
+                    db.prepare(`
+                        INSERT INTO message_reactions (
+                            message_id, user_id,
+                            emoji, created_at
+                        ) VALUES (?, ?, ?, ?)
+                        ON CONFLICT(message_id, user_id)
+                        DO UPDATE SET
+                            emoji = excluded.emoji,
+                            created_at = excluded.created_at
+                    `).run(
+                        messageId,
+                        userId,
+                        emoji,
+                        new Date().toISOString()
+                    );
+                }
+            });
+
+            update();
+
+            return {
+                messageId,
+                ...message,
+                reactions: listReactions.all(messageId),
             };
         },
 
@@ -467,7 +617,16 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                         WHERE r.reader_id = messages.recipient_id
                           AND r.peer_id = messages.sender_id
                           AND r.last_read_message_id >= messages.id
-                    ) AS readAt
+                    ) AS readAt,
+                    reply_to_message_id AS replyToMessageId,
+                    (
+                        SELECT text FROM messages original
+                        WHERE original.id = messages.reply_to_message_id
+                    ) AS replyToText,
+                    (
+                        SELECT sender_id FROM messages original
+                        WHERE original.id = messages.reply_to_message_id
+                    ) AS replyToSenderId
                 FROM messages
                 WHERE
                     (sender_id = ? AND recipient_id = ?)
@@ -479,7 +638,7 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                     LIMIT 100
             `).all(userId, peerId, peerId, userId);
 
-            return rows.reverse();
+            return rows.reverse().map(decorateMessage);
         },
 
         close() {

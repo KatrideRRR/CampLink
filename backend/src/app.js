@@ -630,6 +630,45 @@ export function createAppServer(options = {}) {
             });
         });
 
+        socket.on(
+            'chat:reaction',
+            (payload, acknowledgement) => {
+                const reply =
+                    typeof acknowledgement === 'function'
+                        ? acknowledgement
+                        : () => {};
+
+                if (!store.getSessionUser(
+                    socket.data.sessionToken
+                )) {
+                    socket.disconnect(true);
+                    return reply({
+                        ok: false,
+                        error: 'Unauthorized',
+                    });
+                }
+
+                const result = store.toggleReaction(
+                    user.id,
+                    payload?.messageId,
+                    payload?.emoji
+                );
+
+                if (!result) {
+                    return reply({
+                        ok: false,
+                        error: 'Invalid reaction',
+                    });
+                }
+
+                io.to(`user:${result.senderId}`)
+                    .to(`user:${result.recipientId}`)
+                    .emit('chat:reaction', result);
+
+                reply({ ok: true });
+            }
+        );
+
         socket.on('chat:send', (payload, acknowledgement) => {
             const reply =
                 typeof acknowledgement === 'function'
@@ -649,6 +688,8 @@ export function createAppServer(options = {}) {
             const clientMessageId = payload?.clientMessageId;
 
             const clientCreatedAt = payload?.clientCreatedAt;
+            const replyToMessageId =
+                payload?.replyToMessageId ?? null;
 
             if (
                 !Number.isSafeInteger(toUserId) ||
@@ -674,6 +715,7 @@ export function createAppServer(options = {}) {
                     clientMessageId,
                     text: text.trim(),
                     clientCreatedAt,
+                    replyToMessageId,
                 });
 
                 reply({

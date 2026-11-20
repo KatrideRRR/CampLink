@@ -3,6 +3,7 @@ import {
     useRef,
     useState,
     type FormEvent,
+    type TouchEvent as ReactTouchEvent,
 } from 'react';
 import type { Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
@@ -67,6 +68,14 @@ import {
     saveThemePreference,
     type ThemePreference,
 } from './services/theme';
+import {
+    ACKNOWLEDGED_REACTION,
+    REACTION_CHOICES,
+    applyReactionUpdate,
+    isRightSwipe,
+    isBackSwipe,
+    type ReactionUpdate,
+} from './services/message-interactions';
 import './App.css';
 
 type User = {
@@ -82,6 +91,13 @@ type ChatMessage = {
     text: string;
     createdAt: string;
     readAt?: string | null;
+    replyToMessageId?: number | null;
+    replyToText?: string | null;
+    replyToSenderId?: number | null;
+    reactions?: {
+        userId: number;
+        emoji: string;
+    }[];
 };
 
 type SendResponse = {
@@ -286,6 +302,10 @@ function App() {
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
+    const [replyTo, setReplyTo] =
+        useState<ChatMessage | null>(null);
+    const [reactionMenuMessageId, setReactionMenuMessageId] =
+        useState<number | null>(null);
     const [connected, setConnected] = useState(false);
     const [showOfflineBanner, setShowOfflineBanner] =
         useState(false);
@@ -330,6 +350,25 @@ function App() {
     const previousScrollPeerRef = useRef<number | null>(null);
     const [showJumpToBottom, setShowJumpToBottom] =
         useState(false);
+
+    const messageTouchRef = useRef<{
+        message: ChatMessage;
+        x: number;
+        y: number;
+        held: boolean;
+    } | null>(null);
+
+    const longPressTimerRef = useRef<number | null>(null);
+
+    const lastTapRef = useRef<{
+        id: number;
+        at: number;
+    } | null>(null);
+
+    const edgeTouchRef = useRef<{
+        x: number;
+        y: number;
+    } | null>(null);
 
     const lastReadSentRef = useRef<string | null>(null);
     const readPendingRef = useRef<string | null>(null);
@@ -739,6 +778,7 @@ function App() {
                             clientMessageId: message.clientMessageId,
                             text: message.text,
                             clientCreatedAt: message.createdAt,
+                            replyToMessageId: message.replyToMessageId,
                         },
                         (
                             error: Error | null,
@@ -948,6 +988,52 @@ function App() {
                 );
             }
         });
+
+        socket.on(
+            'chat:reaction',
+            (update: ReactionUpdate) => {
+                if (
+                    !active ||
+                    !Number.isSafeInteger(update?.messageId)
+                ) {
+                    return;
+                }
+
+                const peerId =
+                    update.senderId === me.id
+                        ? update.recipientId
+                        : update.senderId;
+
+                if (
+                    !Number.isSafeInteger(peerId) ||
+                    peerId <= 0 ||
+                    peerId === me.id
+                ) {
+                    return;
+                }
+
+                const cached = readOfflineMessages(
+                    me.id, peerId
+                );
+
+                const updated = applyReactionUpdate(
+                    cached, update
+                );
+
+                if (updated !== cached) {
+                    saveOfflineMessages(
+                        me.id, peerId, updated
+                    );
+                    snapshotChatNow(me.id);
+                }
+
+                if (selectedPeerRef.current === peerId) {
+                    setMessages(current =>
+                        applyReactionUpdate(current, update)
+                    );
+                }
+            }
+        );
 
         socket.on('chat:new', (message: ChatMessage) => {
 
@@ -1163,6 +1249,202 @@ function App() {
         };
     }, [me, selectedPeerId]);
 
+    function chooseReply(message: ChatMessage) {
+        setReplyTo(message);
+        setReactionMenuMessageId(null);
+        composerInputRef.current?.focus({
+            preventScroll: true,
+        });
+    }
+
+    function reactToMessage(
+        messageId: number,
+        emoji: string
+    ) {
+        setReactionMenuMessageId(null);
+
+        const socket = socketRef.current;
+
+        if (!socket?.connected) {
+            setError(
+                'Для отправки реакции нужна связь'
+            );
+            return;
+        }
+
+        socket.timeout(5000).emit(
+            'chat:reaction',
+            { messageId, emoji },
+            (
+                error: Error | null,
+                response?: { ok?: boolean }
+            ) => {
+                if (error || !response?.ok) {
+                    setError(
+                        'Не удалось сохранить реакцию'
+                    );
+                }
+            }
+        );
+    }
+
+    function clearMessageTimer() {
+        if (longPressTimerRef.current !== null) {
+            window.clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }
+
+    function cancelMessageTouch() {
+        clearMessageTimer();
+        messageTouchRef.current = null;
+    }
+
+    function beginMessageTouch(
+        message: ChatMessage,
+        event: ReactTouchEvent<HTMLDivElement>
+    ) {
+        const touch = event.touches[0];
+        if (!touch) return;
+
+        clearMessageTimer();
+        setReactionMenuMessageId(null);
+
+        messageTouchRef.current = {
+            message,
+            x: touch.clientX,
+            y: touch.clientY,
+            held: false,
+        };
+
+        longPressTimerRef.current =
+            window.setTimeout(() => {
+                const current = messageTouchRef.current;
+
+                if (
+                    current &&
+                    current.message.id === message.id
+                ) {
+                    current.held = true;
+                    setReactionMenuMessageId(message.id);
+                }
+            }, 500);
+    }
+
+    function moveMessageTouch(
+        event: ReactTouchEvent<HTMLDivElement>
+    ) {
+        const current = messageTouchRef.current;
+        const touch = event.touches[0];
+
+        if (!current || !touch) return;
+
+        if (
+            Math.abs(touch.clientX - current.x) > 14 ||
+            Math.abs(touch.clientY - current.y) > 14
+        ) {
+            clearMessageTimer();
+        }
+    }
+
+    function endMessageTouch(
+        event: ReactTouchEvent<HTMLDivElement>
+    ) {
+        const current = messageTouchRef.current;
+        const touch = event.changedTouches[0];
+
+        cancelMessageTouch();
+
+        if (!current || !touch || current.held) {
+            return;
+        }
+
+        const dx = touch.clientX - current.x;
+        const dy = touch.clientY - current.y;
+
+        // Свайп от края принадлежит навигации.
+        if (
+            mobileView &&
+            current.x <= 30 &&
+            dx > 30
+        ) {
+            return;
+        }
+
+        if (isRightSwipe(dx, dy)) {
+            chooseReply(current.message);
+            return;
+        }
+
+        if (
+            Math.abs(dx) > 18 ||
+            Math.abs(dy) > 18
+        ) {
+            return;
+        }
+
+        const now = Date.now();
+        const previous = lastTapRef.current;
+
+        if (
+            previous?.id === current.message.id &&
+            now - previous.at <= 340
+        ) {
+            lastTapRef.current = null;
+
+            reactToMessage(
+                current.message.id,
+                ACKNOWLEDGED_REACTION
+            );
+        } else {
+            lastTapRef.current = {
+                id: current.message.id,
+                at: now,
+            };
+        }
+    }
+
+    function returnToChats() {
+        cancelMessageTouch();
+        setReactionMenuMessageId(null);
+        setReplyTo(null);
+        setMobileChatOpen(false);
+    }
+
+    function beginEdgeSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        if (!mobileView || !mobileChatOpen) return;
+
+        const touch = event.touches[0];
+
+        edgeTouchRef.current =
+            touch && touch.clientX <= 30
+                ? {
+                    x: touch.clientX,
+                    y: touch.clientY,
+                }
+                : null;
+    }
+
+    function endEdgeSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        const start = edgeTouchRef.current;
+        edgeTouchRef.current = null;
+
+        const touch = event.changedTouches[0];
+
+        if (!start || !touch) return;
+
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+
+        if (isBackSwipe(start.x, dx, dy)) {
+            returnToChats();
+        }
+    }
+
     function handleMessageScroll() {
         const list = messageListRef.current;
         if (!list) return;
@@ -1255,6 +1537,8 @@ function App() {
 
         selectedPeerRef.current = id;
         setSelectedPeerId(id);
+        setReplyTo(null);
+        setReactionMenuMessageId(null);
 
         setMessages(
             me ? readOfflineMessages(me.id, id) : []
@@ -1319,6 +1603,8 @@ function App() {
             await clearIosSnapshot();
         }
         setPendingMessages([]);
+        setReplyTo(null);
+        setReactionMenuMessageId(null);
         lastReadSentRef.current = null;
         readPendingRef.current = null;
         socketRef.current?.disconnect();
@@ -1355,12 +1641,18 @@ function App() {
                     toUserId: selectedPeerId,
                     text,
                     createdAt: new Date().toISOString(),
+                    ...(replyTo ? {
+                        replyToMessageId: replyTo.id,
+                        replyToText: replyTo.text,
+                        replyToSenderId: replyTo.senderId,
+                    } : {}),
                 }
             );
 
             forceScrollAfterSendRef.current = true;
             setPendingMessages(pending);
             snapshotChatNow(me.id);
+            setReplyTo(null);
             setDraft('');
             setError('');
 
@@ -1510,7 +1802,8 @@ function App() {
                             key={peer.id}
                             type="button"
                             className={`contact ${
-                                selectedPeerId === peer.id
+                                selectedPeerId === peer.id &&
+                                (!mobileView || mobileChatOpen)
                                     ? 'selected'
                                     : ''
                             }`}
@@ -1544,7 +1837,11 @@ function App() {
                 )}
             </aside>
 
-            <section className="chat">
+            <section
+                className="chat"
+                onTouchStartCapture={beginEdgeSwipe}
+                onTouchEndCapture={endEdgeSwipe}
+            >
 
                 {(showOfflineBanner || offlinePreview) && (
                     <div className="offline-banner" role="status">
@@ -1560,7 +1857,7 @@ function App() {
                             <button
                                 type="button"
                                 className="mobile-back"
-                                onClick={() => setMobileChatOpen(false)}
+                                onClick={returnToChats}
                                 aria-label="Вернуться к списку чатов"
                             >
                                 ‹ <span>Чаты</span>
@@ -1607,6 +1904,28 @@ function App() {
 
                                 const message = item.message;
 
+                                const confirmedMessage =
+                                    item.status === 'confirmed'
+                                        ? item.message
+                                        : null;
+
+                                const reactions =
+                                    confirmedMessage?.reactions ?? [];
+
+                                const reactionCounts = [
+                                    '❤️', '🔥', '💩', '🫡',
+                                ].map(emoji => ({
+                                    emoji,
+                                    count: reactions.filter(
+                                        item => item.emoji === emoji
+                                    ).length,
+                                    own: reactions.some(
+                                        item =>
+                                            item.emoji === emoji &&
+                                            item.userId === me.id
+                                    ),
+                                })).filter(item => item.count > 0);
+
                                 const isRead =
                                     item.status === 'confirmed' &&
                                     Boolean(item.message.readAt);
@@ -1621,7 +1940,50 @@ function App() {
                                         className={`message ${
                                             isOutgoing ? 'outgoing' : 'incoming'
                                         }${isPending ? ' queued' : ''}`}
+                                        onTouchStart={event => {
+                                            if (confirmedMessage) {
+                                                beginMessageTouch(
+                                                    confirmedMessage, event
+                                                );
+                                            }
+                                        }}
+                                        onTouchMove={moveMessageTouch}
+                                        onTouchEnd={endMessageTouch}
+                                        onTouchCancel={cancelMessageTouch}
+                                        onDoubleClick={() => {
+                                            if (
+                                                confirmedMessage &&
+                                                !('ontouchstart' in window)
+                                            ) {
+                                                reactToMessage(
+                                                    confirmedMessage.id,
+                                                    ACKNOWLEDGED_REACTION
+                                                );
+                                            }
+                                        }}
+                                        onContextMenu={event => {
+                                            if (confirmedMessage) {
+                                                event.preventDefault();
+                                                setReactionMenuMessageId(
+                                                    confirmedMessage.id
+                                                );
+                                            }
+                                        }}
                                     >
+                                        {message.replyToMessageId && (
+                                            <div className="message-quote">
+                                                <strong>
+                                                    {message.replyToSenderId === me.id
+                                                        ? 'Вы'
+                                                        : selectedPeer.username}
+                                                </strong>
+                                                <span>
+                                                    {message.replyToText ??
+                                                        'Сообщение'}
+                                                </span>
+                                            </div>
+                                        )}
+
                                         <div className="message-text">
                                             {message.text}
                                         </div>
@@ -1668,6 +2030,59 @@ function App() {
                                                     </>
                                                 )}
                                         </small>
+
+                                        {confirmedMessage &&
+                                            reactionMenuMessageId ===
+                                                confirmedMessage.id && (
+                                            <div
+                                                className="reaction-picker"
+                                                role="group"
+                                                aria-label="Выбрать реакцию"
+                                            >
+                                                {REACTION_CHOICES.map(emoji => (
+                                                    <button
+                                                        key={emoji}
+                                                        type="button"
+                                                        onClick={event => {
+                                                            event.stopPropagation();
+                                                            reactToMessage(
+                                                                confirmedMessage.id,
+                                                                emoji
+                                                            );
+                                                        }}
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {confirmedMessage &&
+                                            reactionCounts.length > 0 && (
+                                            <div className="message-reactions">
+                                                {reactionCounts.map(item => (
+                                                    <button
+                                                        key={item.emoji}
+                                                        type="button"
+                                                        className={
+                                                            item.own
+                                                                ? 'reaction-mine'
+                                                                : ''
+                                                        }
+                                                        onClick={() =>
+                                                            reactToMessage(
+                                                                confirmedMessage.id,
+                                                                item.emoji
+                                                            )
+                                                        }
+                                                        title="Реакция"
+                                                    >
+                                                        {item.emoji}
+                                                        <span>{item.count}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -1692,6 +2107,28 @@ function App() {
 
                         {error && (
                             <div className="chat-error">{error}</div>
+                        )}
+
+                        {replyTo && (
+                            <div className="reply-preview">
+                                <div className="reply-preview-content">
+                                    <strong>
+                                        Ответ на сообщение · {
+                                            replyTo.senderId === me.id
+                                                ? 'Вы'
+                                                : selectedPeer.username
+                                        }
+                                    </strong>
+                                    <span>{replyTo.text}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setReplyTo(null)}
+                                    aria-label="Отменить ответ"
+                                >
+                                    ×
+                                </button>
+                            </div>
                         )}
 
                         <form

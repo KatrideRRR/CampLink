@@ -12,6 +12,13 @@ export type OfflineMessage = {
     text: string;
     createdAt: string;
     readAt?: string | null;
+    replyToMessageId?: number | null;
+    replyToText?: string | null;
+    replyToSenderId?: number | null;
+    reactions?: {
+        userId: number;
+        emoji: string;
+    }[];
 };
 
 type StorageLike = Pick<

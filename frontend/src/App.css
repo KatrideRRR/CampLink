@@ -866,3 +866,160 @@ body {
 :root[data-theme='light'] .receipt-icon.is-read {
     color: #1675b9;
 }
+
+/* CampLink message replies and reactions */
+
+.message {
+    position: relative;
+    touch-action: pan-y;
+    -webkit-touch-callout: none;
+}
+
+.message-quote {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px 8px;
+    margin-bottom: 8px;
+    border-left: 3px solid #e8ff72;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, .15);
+    font-size: 12px;
+}
+
+.message-quote strong {
+    color: #e8ff72;
+    font-weight: 650;
+}
+
+.message-quote span {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.reply-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid #303238;
+    background: #1b1e23;
+    flex-shrink: 0;
+}
+
+.reply-preview-content {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    border-left: 3px solid #e8ff72;
+    padding-left: 10px;
+}
+
+.reply-preview-content strong {
+    font-size: 12px;
+    color: #e8ff72;
+}
+
+.reply-preview-content span {
+    font-size: 12px;
+    color: #b5b7bd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.reply-preview > button {
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 25px;
+    padding: 4px 8px;
+}
+
+.reaction-picker {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 20;
+    display: flex;
+    gap: 8px;
+    padding: 7px;
+    background: #30343d;
+    border: 1px solid #555b64;
+    border-radius: 28px;
+    box-shadow: 0 5px 20px #0007;
+}
+
+.message.incoming .reaction-picker {
+    right: auto;
+    left: 0;
+}
+
+.reaction-picker button {
+    border: 0;
+    border-radius: 50%;
+    width: 39px;
+    height: 39px;
+    padding: 0;
+    background: transparent;
+    font-size: 25px;
+    line-height: 1;
+    touch-action: manipulation;
+}
+
+.reaction-picker button:active {
+    transform: scale(1.2);
+}
+
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 7px;
+}
+
+.message-reactions button {
+    border: 1px solid #59606b;
+    border-radius: 16px;
+    padding: 3px 7px;
+    background: #272c33;
+    color: #eee;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+}
+
+.message-reactions button span {
+    font-size: 11px;
+}
+
+.message-reactions button.reaction-mine {
+    border-color: #e8ff72;
+}
+
+:root[data-theme='light'] .reply-preview {
+    background: #f5f7fa;
+    border-color: #e1e5ec;
+}
+
+:root[data-theme='light'] .reply-preview-content span {
+    color: #59616d;
+}
+
+:root[data-theme='light'] .reaction-picker {
+    background: #fff;
+    border-color: #d9dee5;
+}
+
+:root[data-theme='light'] .message-reactions button {
+    background: #fff;
+    color: #24272d;
+    border-color: #c4cbd4;
+}

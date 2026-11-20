@@ -120,6 +120,12 @@ export function createRelayTransport(
         async send(
             message: QueuedMessage
         ): Promise<TransportResponse> {
+            if (message.replyToMessageId !== undefined) {
+                throw new Error(
+                    'Replies require primary transport'
+                );
+            }
+
             const credential = readRelayCredential(userId);
 
             if (!baseUrl || !credential) {

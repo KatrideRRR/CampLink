@@ -4,6 +4,9 @@ export type QueuedMessage = {
     toUserId: number;
     text: string;
     createdAt: string;
+    replyToMessageId?: number;
+    replyToText?: string;
+    replyToSenderId?: number;
 };
 
 type StorageLike = Pick<
@@ -35,7 +38,18 @@ function isQueuedMessage(
         item.text.trim().length > 0 &&
         item.text.length <= 2000 &&
         typeof item.createdAt === 'string' &&
-        Number.isFinite(Date.parse(item.createdAt))
+        Number.isFinite(Date.parse(item.createdAt)) &&
+        (
+            item.replyToMessageId === undefined ||
+            (
+                Number.isSafeInteger(item.replyToMessageId) &&
+                Number(item.replyToMessageId) > 0 &&
+                typeof item.replyToText === 'string' &&
+                item.replyToText.length <= 2000 &&
+                Number.isSafeInteger(item.replyToSenderId) &&
+                Number(item.replyToSenderId) > 0
+            )
+        )
     );
 }
 
