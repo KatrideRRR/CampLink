@@ -39,6 +39,14 @@ function readSessionToken(header = '') {
     return match?.[1] ?? null;
 }
 
+function readBearerToken(header) {
+    if (typeof header !== 'string') return null;
+
+    const match = /^Bearer ([a-f0-9]{64})$/i.exec(header);
+
+    return match ? match[1].toLowerCase() : null;
+}
+
 const cookieOptions = {
     httpOnly: true,
     sameSite: 'lax',
@@ -63,10 +71,41 @@ export function createAppServer(options = {}) {
         .map((origin) => origin.trim())
         .filter(Boolean);
 
+    const nativeOrigins = new Set([
+        'capacitor://localhost',
+        'https://localhost',
+    ]);
+
+    app.use((req, res, next) => {
+        const origin = req.get('origin');
+
+        if (!nativeOrigins.has(origin)) {
+            return next();
+        }
+
+        res.vary('Origin');
+        res.set({
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods':
+                'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers':
+                'Content-Type, Authorization',
+        });
+
+        if (req.method === 'OPTIONS') {
+            return res.sendStatus(204);
+        }
+
+        next();
+    });
+
     const io = new Server(httpServer, {
         transports: ['websocket', 'polling'],
         cors: {
-            origin: allowedOrigins,
+            origin: [
+                ...allowedOrigins,
+                ...nativeOrigins,
+            ],
             credentials: true,
         },
         allowRequest: (request, callback) => {
@@ -74,7 +113,9 @@ export function createAppServer(options = {}) {
 
             callback(
                 null,
-                !origin || allowedOrigins.includes(origin)
+                !origin ||
+                allowedOrigins.includes(origin) ||
+                nativeOrigins.has(origin)
             );
         },
     });
@@ -144,7 +185,23 @@ export function createAppServer(options = {}) {
     const loginAttempts = new Map();
 
     function requireAuth(req, res, next) {
-        const token = readSessionToken(req.headers.cookie);
+        const authorization = req.get('authorization');
+        const origin = req.get('origin');
+
+        if (
+            authorization &&
+            origin &&
+            !nativeOrigins.has(origin)
+        ) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
+
+        const token = authorization
+            ? readBearerToken(authorization)
+            : readSessionToken(req.headers.cookie);
+
         const user = store.getSessionUser(token);
 
         if (!user) {
@@ -260,7 +317,24 @@ export function createAppServer(options = {}) {
         }
     });
 
-    app.post('/api/auth/login', (req, res) => {
+    app.post([
+        '/api/auth/login',
+        '/api/auth/native-login',
+    ], (req, res) => {
+        const native =
+            req.path === '/api/auth/native-login';
+
+        const origin = req.get('origin');
+
+        if (
+            native &&
+            origin &&
+            !nativeOrigins.has(origin)
+        ) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
         const username =
             typeof req.body?.username === 'string'
                 ? req.body.username.trim().toLowerCase()
@@ -307,6 +381,17 @@ export function createAppServer(options = {}) {
 
         const token = store.createSession(user.id);
 
+        res.set('Cache-Control', 'no-store');
+
+        if (native) {
+            return res.json({
+                user,
+                token,
+                expiresInSeconds:
+                    Math.floor(SESSION_AGE / 1000),
+            });
+        }
+
         res.cookie(COOKIE_NAME, token, {
             ...cookieOptions,
             maxAge: SESSION_AGE,
@@ -322,7 +407,11 @@ export function createAppServer(options = {}) {
     app.post('/api/push/devices', requireAuth, (req, res) => {
         const origin = req.get('origin');
 
-        if (origin && !allowedOrigins.includes(origin)) {
+        if (
+            origin &&
+            !allowedOrigins.includes(origin) &&
+            !nativeOrigins.has(origin)
+        ) {
             return res.status(403).json({
                 error: 'Forbidden origin',
             });
@@ -433,9 +522,13 @@ export function createAppServer(options = {}) {
     );
 
     io.use((socket, next) => {
-        const token = readSessionToken(
-            socket.request.headers.cookie
-        );
+        const nativeToken = socket.handshake.auth?.token;
+
+        const token = nativeToken === undefined
+            ? readSessionToken(
+                socket.request.headers.cookie
+            )
+            : nativeToken;
 
         const user = store.getSessionUser(token);
 
