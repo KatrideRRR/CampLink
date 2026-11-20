@@ -51,6 +51,9 @@ import {
     type RelayCredential,
 } from './services/relay';
 import { deliverMessage } from './services/delivery';
+import {
+    selectNextPendingMessage,
+} from './services/outbox-selection';
 import type { MessageTransport } from './services/transports';
 import { buildChatTimeline } from './services/timeline';
 import {
@@ -135,6 +138,15 @@ function belongsToChat(
         (message.senderId === peerId &&
             message.recipientId === ownId)
     );
+}
+
+function snapshotChatNow(userId: number): void {
+    void backupIosSnapshot(userId).catch(error => {
+        console.warn(
+            '[CampLink] Immediate cache backup failed',
+            error
+        );
+    });
 }
 
 function App() {
@@ -275,6 +287,8 @@ function App() {
     const [pendingMessages, setPendingMessages] =
         useState<QueuedMessage[]>([]);
     const [error, setError] = useState('');
+    const [rejectedMessageIds, setRejectedMessageIds] =
+        useState<string[]>([]);
 
     const [onlineIds, setOnlineIds] =
         useState<number[]>([]);
@@ -577,6 +591,9 @@ function App() {
         );
 
         const relayedInSession = new Set<string>();
+        const rejectedInSession = new Set<string>();
+
+        setRejectedMessageIds([]);
 
         async function refreshRelayCredential() {
             try {
@@ -656,10 +673,11 @@ function App() {
             try {
 
                 while (active) {
-                    const next = readOutbox(me.id).find(
-                        (message) =>
-                            socket.connected ||
-                            !relayedInSession.has(message.clientMessageId)
+                    const next = selectNextPendingMessage(
+                        readOutbox(me.id),
+                        socket.connected,
+                        relayedInSession,
+                        rejectedInSession
                     );
 
                     if (!next) break;
@@ -678,10 +696,23 @@ function App() {
 
                     if (result.status !== 'sent') {
                         if (result.status === 'rejected') {
-                            setError(
-                                'Сервер отклонил сообщение: ' +
-                                result.error
+                            rejectedInSession.add(
+                                next.clientMessageId
                             );
+
+                            setRejectedMessageIds(current => [
+                                ...new Set([
+                                    ...current,
+                                    next.clientMessageId,
+                                ]),
+                            ]);
+
+                            setError(
+                                'Некоторые сообщения не доставлены. ' +
+                                'Они сохранены в очереди.'
+                            );
+
+                            continue;
                         }
 
                         break;
@@ -718,6 +749,9 @@ function App() {
                         message.recipientId,
                         [message]
                     );
+
+                    snapshotChatNow(me.id);
+
                     const peerId = selectedPeerRef.current;
 
                     if (
@@ -787,6 +821,8 @@ function App() {
                 [message]
             );
 
+            snapshotChatNow(me.id);
+
             setPeers(current => [...current]);
 
             if (
@@ -827,6 +863,18 @@ function App() {
                                 message.clientMessageId
                             )
                         );
+
+                        rejectedInSession.delete(
+                            message.clientMessageId
+                        );
+
+                        setRejectedMessageIds(current =>
+                            current.filter(
+                                id => id !== message.clientMessageId
+                            )
+                        );
+
+                        snapshotChatNow(me.id);
                     } catch {
                         // The message remains queued for a safe retry.
                     }
@@ -847,6 +895,8 @@ function App() {
 
         socket.on('connect', () => {
             relayedInSession.clear();
+            rejectedInSession.clear();
+            setRejectedMessageIds([]);
             void refreshRelayCredential();
             setOfflinePreview(false);
             void drainQueue();
@@ -1163,6 +1213,7 @@ function App() {
 
             forceScrollAfterSendRef.current = true;
             setPendingMessages(pending);
+            snapshotChatNow(me.id);
             setDraft('');
             setError('');
 
@@ -1426,9 +1477,13 @@ function App() {
 
                                         <small>
                                             {item.status === 'pending'
-                                                ? connected
-                                                    ? 'Отправляем...'
-                                                    : 'В очереди · ожидаем связь'
+                                                ? rejectedMessageIds.includes(
+                                                    message.clientMessageId
+                                                )
+                                                    ? 'Не доставлено · нужна проверка'
+                                                    : connected
+                                                        ? 'Отправляем...'
+                                                        : 'В очереди · ожидаем связь'
                                                 : new Date(
                                                     message.createdAt
                                                 ).toLocaleTimeString('ru-RU', {

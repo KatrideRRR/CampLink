@@ -2,13 +2,23 @@
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import {
+    createSnapshotWriteQueue,
+} from './snapshot-write-queue';
+import {
     buildSnapshot,
     restoreSnapshot,
 } from './native-cache-model';
 
 const KEY = 'camplink.native.chat.snapshot.v1';
 
-let lastSaved: string | null = null;
+const snapshotWrites = createSnapshotWriteQueue(
+    async (value) => {
+        await Preferences.set({
+            key: KEY,
+            value,
+        });
+    }
+);
 
 function isIos() {
     return Capacitor.isNativePlatform() &&
@@ -26,20 +36,15 @@ export async function backupIosSnapshot(
     );
 
     if (!snapshot) return false;
-    if (snapshot === lastSaved) return true;
-
-    await Preferences.set({
-        key: KEY,
-        value: snapshot,
-    });
-
-    lastSaved = snapshot;
+    await snapshotWrites.save(snapshot);
     return true;
 }
 
 export async function restoreIosSnapshot():
     Promise<boolean> {
     if (!isIos()) return false;
+
+    await snapshotWrites.flush();
 
     const { value } = await Preferences.get({
         key: KEY,
@@ -54,6 +59,7 @@ export async function clearIosSnapshot():
     Promise<void> {
     if (!isIos()) return;
 
+    await snapshotWrites.flush();
     await Preferences.remove({ key: KEY });
-    lastSaved = null;
+    snapshotWrites.reset();
 }
