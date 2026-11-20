@@ -168,6 +168,19 @@ export function createAppServer(options = {}) {
         }
     }
 
+    function emitUnreadCount(userId, peerId) {
+        const item = store.getUnreadCounts(userId)
+            .find(row => row.peerId === peerId);
+
+        io.to(`user:${userId}`).emit(
+            'chat:unread',
+            {
+                peerId,
+                unreadCount: item?.unreadCount ?? 0,
+            }
+        );
+    }
+
     function persistAndBroadcast(payload) {
         const result = store.saveMessage(payload);
 
@@ -175,6 +188,11 @@ export function createAppServer(options = {}) {
             io.to(`user:${payload.senderId}`)
                 .to(`user:${payload.recipientId}`)
                 .emit('chat:new', result.message);
+
+            emitUnreadCount(
+                payload.recipientId,
+                payload.senderId
+            );
 
             deliverPush(result.message);
         }
@@ -583,6 +601,10 @@ export function createAppServer(options = {}) {
             userId: user.id,
         });
 
+        socket.emit('chat:unread:snapshot', {
+            items: store.getUnreadCounts(user.id),
+        });
+
         socket.on('chat:read', (payload, acknowledgement) => {
             const reply =
                 typeof acknowledgement === 'function'
@@ -614,6 +636,8 @@ export function createAppServer(options = {}) {
             }
 
             if (result.changed) {
+                emitUnreadCount(user.id, peerId);
+
                 io.to(`user:${peerId}`).emit(
                     'chat:read',
                     {

@@ -386,6 +386,30 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             `).run(userId, provider, token);
         },
 
+        getUnreadCounts(userId) {
+            if (
+                !Number.isSafeInteger(userId) ||
+                userId <= 0
+            ) {
+                return [];
+            }
+
+            return db.prepare(`
+                SELECT
+                    m.sender_id AS peerId,
+                    COUNT(*) AS unreadCount
+                FROM messages m
+                LEFT JOIN message_reads r
+                    ON r.reader_id = m.recipient_id
+                   AND r.peer_id = m.sender_id
+                WHERE m.recipient_id = ?
+                  AND m.id > COALESCE(
+                      r.last_read_message_id, 0
+                  )
+                GROUP BY m.sender_id
+            `).all(userId);
+        },
+
         listUsers(excludeId) {
             return db.prepare(`
         SELECT id, username, created_at AS createdAt

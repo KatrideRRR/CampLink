@@ -76,6 +76,13 @@ import {
     isBackSwipe,
     type ReactionUpdate,
 } from './services/message-interactions';
+import {
+    normalizeUnreadCounts,
+    updateUnreadCount,
+    loadUnreadCounts,
+    saveUnreadCounts,
+    clearUnreadCounts,
+} from './services/unread-chats';
 import './App.css';
 
 type User = {
@@ -269,6 +276,15 @@ function App() {
     const [password, setPassword] = useState('');
 
     const [peers, setPeers] = useState<User[]>([]);
+
+    const [unreadCounts, setUnreadCounts] =
+        useState<Record<number, number>>({});
+
+    useEffect(() => {
+        setUnreadCounts(
+            me ? loadUnreadCounts(me.id) : {}
+        );
+    }, [me?.id]);
     const [selectedPeerId, setSelectedPeerId] =
         useState<number | null>(null);
     const [mobileChatOpen, setMobileChatOpen] = useState(false);
@@ -1035,6 +1051,36 @@ function App() {
             }
         );
 
+        socket.on(
+            'chat:unread:snapshot',
+            (payload: { items?: unknown }) => {
+                if (!active) return;
+
+                const counts = normalizeUnreadCounts(
+                    payload?.items
+                );
+
+                setUnreadCounts(counts);
+                saveUnreadCounts(me.id, counts);
+            }
+        );
+
+        socket.on('chat:unread', (payload: unknown) => {
+            if (!active) return;
+
+            setUnreadCounts(current => {
+                const next = updateUnreadCount(
+                    current, payload
+                );
+
+                if (next !== current) {
+                    saveUnreadCounts(me.id, next);
+                }
+
+                return next;
+            });
+        });
+
         socket.on('chat:new', (message: ChatMessage) => {
 
             const partnerId =
@@ -1602,6 +1648,11 @@ function App() {
             clearRelayCredential(me.id);
             await clearIosSnapshot();
         }
+        if (me) {
+            clearUnreadCounts(me.id);
+        }
+
+        setUnreadCounts({});
         setPendingMessages([]);
         setReplyTo(null);
         setReactionMenuMessageId(null);
@@ -1806,6 +1857,10 @@ function App() {
                                 (!mobileView || mobileChatOpen)
                                     ? 'selected'
                                     : ''
+                            }${
+                                (unreadCounts[peer.id] ?? 0) > 0
+                                    ? ' unread'
+                                    : ''
                             }`}
                             onClick={() => selectPeer(peer.id)}
                         >
@@ -1820,6 +1875,19 @@ function App() {
                             className="presence-dot"
                             title="В сети"
                         />
+                    )}
+
+                    {(unreadCounts[peer.id] ?? 0) > 0 && (
+                        <span
+                            className="unread-counter"
+                            aria-label={
+                                `${unreadCounts[peer.id]} непрочитанных`
+                            }
+                        >
+                            {unreadCounts[peer.id] > 99
+                                ? '99+'
+                                : unreadCounts[peer.id]}
+                        </span>
                     )}
                 </span>
                 <small className="last-message-preview">

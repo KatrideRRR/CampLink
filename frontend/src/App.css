@@ -1023,3 +1023,50 @@ body {
     color: #24272d;
     border-color: #c4cbd4;
 }
+
+/* Unread CampLink conversations */
+
+.contact.unread:not(.selected) {
+    background: #252c33;
+    box-shadow: inset 3px 0 0 #e8ff72;
+}
+
+.contact.unread .contact-info strong {
+    font-weight: 800;
+}
+
+.contact.unread .last-message-preview {
+    color: #e5e9eb;
+    font-weight: 600;
+}
+
+.unread-counter {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 23px;
+    height: 23px;
+    padding: 0 6px;
+    border-radius: 14px;
+    background: #e8ff72;
+    color: #15181c;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+:root[data-theme='light'] .contact.unread:not(.selected) {
+    background: #eef3e1;
+    box-shadow: inset 3px 0 0 #879a36;
+}
+
+:root[data-theme='light'] .contact.unread .last-message-preview {
+    color: #313d28;
+}
+
+:root[data-theme='light'] .unread-counter {
+    background: #788d28;
+    color: #fff;
+}
