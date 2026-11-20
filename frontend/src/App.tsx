@@ -2036,6 +2036,10 @@ function App() {
                                                 confirmedMessage.id && (
                                             <div
                                                 className="reaction-picker"
+                                                onTouchStart={event => event.stopPropagation()}
+                                                onTouchMove={event => event.stopPropagation()}
+                                                onTouchEnd={event => event.stopPropagation()}
+                                                onDoubleClick={event => event.stopPropagation()}
                                                 role="group"
                                                 aria-label="Выбрать реакцию"
                                             >
@@ -2059,7 +2063,13 @@ function App() {
 
                                         {confirmedMessage &&
                                             reactionCounts.length > 0 && (
-                                            <div className="message-reactions">
+                                            <div
+                                                className="message-reactions"
+                                                onTouchStart={event => event.stopPropagation()}
+                                                onTouchMove={event => event.stopPropagation()}
+                                                onTouchEnd={event => event.stopPropagation()}
+                                                onDoubleClick={event => event.stopPropagation()}
+                                            >
                                                 {reactionCounts.map(item => (
                                                     <button
                                                         key={item.emoji}
