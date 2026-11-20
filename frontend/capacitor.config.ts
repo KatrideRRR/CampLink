@@ -5,6 +5,15 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const testServerUrl =
     process.env.CAMPLINK_NATIVE_TEST_URL?.trim();
 
+const bundledNative =
+    process.env.CAMPLINK_BUNDLED_NATIVE === '1';
+
+if (testServerUrl && bundledNative) {
+    throw new Error(
+        'Cannot combine remote test and bundled mode'
+    );
+}
+
 if (
     testServerUrl &&
     !testServerUrl.startsWith('https://')
@@ -45,11 +54,13 @@ const config: CapacitorConfig = {
             url: testServerUrl,
             errorPath: 'offline-shell.html',
         }
-        : {
-            appStartPath: '/offline-shell.html',
-            allowNavigation: ['chat.camplink.ru'],
-            errorPath: 'offline-shell.html',
-        },
+        : bundledNative
+            ? undefined
+            : {
+                appStartPath: '/offline-shell.html',
+                allowNavigation: ['chat.camplink.ru'],
+                errorPath: 'offline-shell.html',
+            },
 };
 
 export default config;
