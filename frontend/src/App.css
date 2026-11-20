@@ -787,3 +787,56 @@ body {
     font-size: 13px;
     color: #d5d8d9;
 }
+
+
+/* Chat scroll area and jump-to-bottom control */
+
+.chat-scroll-region {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-scroll-region .message-list {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.jump-to-bottom {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+
+    display: grid;
+    place-items: center;
+
+    width: 42px;
+    height: 42px;
+    padding: 0;
+
+    border: 1px solid #50545b;
+    border-radius: 50%;
+
+    background: #292d34;
+    color: #f5f5f5;
+    font-size: 24px;
+    font-weight: 400;
+
+    box-shadow: 0 4px 18px rgba(0,0,0,.28);
+    cursor: pointer;
+}
+
+.jump-to-bottom:hover {
+    background: #363c44;
+}
+
+:root[data-theme='light'] .jump-to-bottom {
+    background: #fff;
+    color: #222;
+    border-color: #dadde3;
+}

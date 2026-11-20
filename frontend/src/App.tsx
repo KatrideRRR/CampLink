@@ -299,6 +299,10 @@ function App() {
     const messageListRef = useRef<HTMLDivElement | null>(null);
     const composerInputRef = useRef<HTMLInputElement | null>(null);
     const forceScrollAfterSendRef = useRef(false);
+    const nearBottomRef = useRef(true);
+    const previousScrollPeerRef = useRef<number | null>(null);
+    const [showJumpToBottom, setShowJumpToBottom] =
+        useState(false);
 
     useEffect(() => {
         if (!me || pendingPushPeerId === null) return;
@@ -934,33 +938,78 @@ function App() {
         };
     }, [me, selectedPeerId]);
 
-    useEffect(() => {
+    function handleMessageScroll() {
         const list = messageListRef.current;
         if (!list) return;
 
-        if (forceScrollAfterSendRef.current) {
-            forceScrollAfterSendRef.current = false;
+        const remaining =
+            list.scrollHeight -
+            list.clientHeight -
+            list.scrollTop;
 
-            const scroll = () => {
-                if (messageListRef.current === list) {
-                    list.scrollTop = list.scrollHeight;
-                }
-            };
+        const nearBottom = remaining <= 100;
+        nearBottomRef.current = nearBottom;
 
-            scroll();
-            window.requestAnimationFrame(() => {
-                scroll();
-                window.requestAnimationFrame(scroll);
-            });
-            return;
-        }
+        setShowJumpToBottom(
+            !nearBottom &&
+            list.scrollHeight > list.clientHeight + 120
+        );
+    }
+
+    function scrollToChatBottom(
+        behavior: ScrollBehavior = 'smooth'
+    ) {
+        const list = messageListRef.current;
+        if (!list) return;
+
+        nearBottomRef.current = true;
+        setShowJumpToBottom(false);
 
         list.scrollTo({
             top: list.scrollHeight,
             behavior: window.matchMedia(
                 '(prefers-reduced-motion: reduce)'
-            ).matches ? 'auto' : 'smooth',
+            ).matches ? 'auto' : behavior,
         });
+    }
+
+    useEffect(() => {
+        const list = messageListRef.current;
+        if (!list) return;
+
+        const peerChanged =
+            previousScrollPeerRef.current !== selectedPeerId;
+
+        previousScrollPeerRef.current = selectedPeerId;
+
+        const sent = forceScrollAfterSendRef.current;
+        forceScrollAfterSendRef.current = false;
+
+        if (peerChanged) {
+            nearBottomRef.current = true;
+            setShowJumpToBottom(false);
+
+            list.scrollTo({
+                top: list.scrollHeight,
+                behavior: 'instant',
+            });
+            return;
+        }
+
+        if (sent) {
+            scrollToChatBottom('smooth');
+            return;
+        }
+
+        // Не мешаем человеку читать старые сообщения.
+        if (nearBottomRef.current) {
+            list.scrollTo({
+                top: list.scrollHeight,
+                behavior: 'instant',
+            });
+        } else {
+            handleMessageScroll();
+        }
     }, [
         messages,
         pendingMessages,
@@ -1172,19 +1221,14 @@ function App() {
                 <div className="account">
                     <span>@{me.username}</span>
 
-                    {isNativeIos && (
+                    {isNativeIos && pushStatus !== 'registered' && (
                         <button
                             type="button"
                             className="text-button"
                             onClick={() => void enableIosPush()}
-                            disabled={
-                                pushStatus === 'requesting' ||
-                                pushStatus === 'registered'
-                            }
+                            disabled={pushStatus === 'requesting'}
                         >
-                            {pushStatus === 'registered'
-                                ? 'Устройство зарегистрировано'
-                                : pushStatus === 'requesting'
+                            {pushStatus === 'requesting'
                                     ? 'Подключаем…'
                                     : pushStatus === 'denied'
                                         ? 'Push запрещён'
@@ -1283,7 +1327,12 @@ function App() {
                             </div>
                         </header>
 
-                        <div className="message-list" ref={messageListRef}>
+                        <div className="chat-scroll-region">
+                            <div
+                                className="message-list"
+                                ref={messageListRef}
+                                onScroll={handleMessageScroll}
+                            >
 
                             {timeline.length === 0 && (
                                 <p className="empty-chat">
@@ -1335,6 +1384,21 @@ function App() {
                             })}
 
                             
+                        </div>
+
+                            {showJumpToBottom && (
+                                <button
+                                    type="button"
+                                    className="jump-to-bottom"
+                                    aria-label="К последним сообщениям"
+                                    title="К последним сообщениям"
+                                    onClick={() =>
+                                        scrollToChatBottom('smooth')
+                                    }
+                                >
+                                    ↓
+                                </button>
+                            )}
                         </div>
 
                         {error && (
