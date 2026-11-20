@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
+import { apiFetch } from './native-auth';
 
 export type PushStatus =
     | 'off'
@@ -17,7 +18,7 @@ async function saveToken(token: string): Promise<void> {
         throw new Error('Empty FCM token');
     }
 
-    const response = await fetch('/api/push/devices', {
+    const response = await apiFetch('/api/push/devices', {
         method: 'POST',
         credentials: 'same-origin',
         headers: {

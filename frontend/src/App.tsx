@@ -8,6 +8,13 @@ import type { Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
 import { connectToServer } from './services/connection';
 import {
+    apiFetch,
+    isBundledNative,
+    restoreNativeSession,
+    saveNativeSession,
+    clearNativeSession,
+} from './services/native-auth';
+import {
     enqueueOutboxMessage,
     readOutbox,
     removeOutboxMessage,
@@ -34,6 +41,7 @@ import {
 } from './services/push-ios';
 import {
     backupIosSnapshot,
+    restoreIosSnapshot,
     clearIosSnapshot,
 } from './services/native-cache';
 import {
@@ -75,7 +83,7 @@ type SendResponse = {
 };
 
 async function apiGet<T>(url: string): Promise<T> {
-    const response = await fetch(url);
+    const response = await apiFetch(url);
 
     if (!response.ok) {
         throw new Error('Request failed');
@@ -88,7 +96,7 @@ async function apiPost<T>(
     url: string,
     body: Record<string, unknown>
 ): Promise<T> {
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -440,6 +448,18 @@ function App() {
         let active = true;
 
         async function restoreSession() {
+            if (isBundledNative()) {
+                try {
+                    await restoreIosSnapshot();
+                    await restoreNativeSession();
+                } catch (error) {
+                    console.warn(
+                        'Native session restore failed',
+                        error
+                    );
+                }
+            }
+
             const cached = readOfflineUser();
 
             let status: number | 'unreachable' = 'unreachable';
@@ -452,7 +472,7 @@ function App() {
             }, 4000);
 
             try {
-                const response = await fetch('/api/auth/me', {
+                const response = await apiFetch('/api/auth/me', {
                     cache: 'no-store',
                     signal: controller.signal,
                 });
@@ -480,7 +500,11 @@ function App() {
                 serverUser
             );
 
-            if (result.invalidate && cached) {
+            if (
+                result.invalidate &&
+                cached &&
+                !isBundledNative()
+            ) {
                 clearOfflineCache(cached.id);
             }
 
@@ -556,7 +580,7 @@ function App() {
 
         async function refreshRelayCredential() {
             try {
-                const response = await fetch(
+                const response = await apiFetch(
                     '/api/relay/credential',
                     { cache: 'no-store' }
                 );
@@ -863,7 +887,17 @@ function App() {
 
             if (!active) return;
 
-            clearOfflineCache(me.id);
+            if (isBundledNative()) {
+                void clearNativeSession().catch(
+                    error => console.warn(
+                        'Native session cleanup failed',
+                        error
+                    )
+                );
+            } else {
+                clearOfflineCache(me.id);
+            }
+
             clearRelayCredential(me.id);
             setMe(null);
             setPeers([]);
@@ -1040,10 +1074,32 @@ function App() {
         setError('');
 
         try {
-            const result = await apiPost<{ user: User }>(
-                '/api/auth/login',
+            const native = isBundledNative();
+
+            const result = await apiPost<{
+                user: User;
+                token?: string;
+                expiresInSeconds?: number;
+            }>(
+                native
+                    ? '/api/auth/native-login'
+                    : '/api/auth/login',
                 { username, password }
             );
+
+            if (native) {
+                try {
+                    await saveNativeSession(
+                        result.token ?? '',
+                        result.expiresInSeconds ?? 0
+                    );
+                } catch {
+                    setError(
+                        'Не удалось сохранить защищённую сессию'
+                    );
+                    return;
+                }
+            }
 
             setPassword('');
             saveOfflineUser(result.user);
@@ -1057,6 +1113,7 @@ function App() {
     async function handleLogout() {
         try {
             await apiPost('/api/auth/logout', {});
+            await clearNativeSession();
         } catch {
             setError('Не удалось завершить сессию');
             return;
