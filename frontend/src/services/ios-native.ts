@@ -1,4 +1,3 @@
-
 import { Capacitor } from '@capacitor/core';
 import { App as NativeApp } from '@capacitor/app';
 import { Keyboard } from '@capacitor/keyboard';
@@ -8,48 +7,84 @@ type Listener = {
     remove: () => Promise<void>;
 };
 
-export function installViewportTracking() {
-    if (
-        Capacitor.isNativePlatform() &&
-        Capacitor.getPlatform() === 'ios'
-    ) {
-        return;
+let nativeKeyboardHeight = 0;
+let expandedHeight = 0;
+
+function updateViewport() {
+    const viewport = window.visualViewport;
+
+    const visibleHeight =
+        viewport?.height ?? window.innerHeight;
+
+    if (nativeKeyboardHeight === 0) {
+        expandedHeight = Math.max(
+            visibleHeight,
+            window.innerHeight
+        );
     }
-    const update = () => {
-        const viewport = window.visualViewport;
 
-        if (!viewport) return;
+    const fallbackHeight = Math.max(
+        200,
+        expandedHeight - nativeKeyboardHeight
+    );
 
-        document.documentElement.style.setProperty(
-            '--camplink-viewport-height',
-            `${Math.round(viewport.height)}px`
-        );
+    const height = nativeKeyboardHeight > 0
+        ? Math.min(visibleHeight, fallbackHeight)
+        : visibleHeight;
 
-        document.documentElement.style.setProperty(
-            '--camplink-viewport-top',
-            `${Math.round(viewport.offsetTop)}px`
-        );
-    };
+    document.documentElement.style.setProperty(
+        '--camplink-viewport-height',
+        `${Math.round(height)}px`
+    );
 
-    update();
+    document.documentElement.style.setProperty(
+        '--camplink-viewport-top',
+        `${Math.round(viewport?.offsetTop ?? 0)}px`
+    );
+}
+
+function updateKeyboardHeight(height: number) {
+    nativeKeyboardHeight =
+        Number.isFinite(height) && height > 0
+            ? height
+            : 0;
+
+    updateViewport();
+
+    window.requestAnimationFrame(updateViewport);
+    window.setTimeout(updateViewport, 100);
+    window.setTimeout(updateViewport, 400);
+}
+
+export function installViewportTracking() {
+    updateViewport();
 
     window.visualViewport?.addEventListener(
         'resize',
-        update
+        updateViewport
     );
 
     window.visualViewport?.addEventListener(
         'scroll',
-        update
+        updateViewport
     );
 
-    window.addEventListener('resize', update);
+    window.addEventListener(
+        'resize',
+        updateViewport
+    );
+
+    window.addEventListener(
+        'orientationchange',
+        updateViewport
+    );
 }
 
 export function observeIosLifecycle(
     onResume: () => void,
     onKeyboardSettled: () => void,
-    onNetworkChange: (connected: boolean) => void
+    onNetworkChange: (connected: boolean) => void,
+    onKeyboardWillChange: () => void = () => {}
 ): () => void {
     if (
         !Capacitor.isNativePlatform() ||
@@ -61,16 +96,14 @@ export function observeIosLifecycle(
     let disposed = false;
     const listeners: Listener[] = [];
 
-    function register(
-        pending: Promise<Listener>
-    ) {
-        void pending.then((listener) => {
+    function register(pending: Promise<Listener>) {
+        void pending.then(listener => {
             if (disposed) {
                 void listener.remove();
             } else {
                 listeners.push(listener);
             }
-        }).catch((error) => {
+        }).catch(error => {
             console.warn(
                 'CampLink native listener unavailable',
                 error
@@ -83,6 +116,7 @@ export function observeIosLifecycle(
             'appStateChange',
             ({ isActive }) => {
                 if (isActive) {
+                    updateViewport();
                     onResume();
                 }
             }
@@ -92,9 +126,15 @@ export function observeIosLifecycle(
     register(
         Keyboard.addListener(
             'keyboardWillShow',
-            () => {
+            info => {
+                onKeyboardWillChange();
+
                 document.documentElement.classList.add(
                     'camplink-keyboard-open'
+                );
+
+                updateKeyboardHeight(
+                    info.keyboardHeight
                 );
             }
         )
@@ -103,7 +143,19 @@ export function observeIosLifecycle(
     register(
         Keyboard.addListener(
             'keyboardDidShow',
-            onKeyboardSettled
+            info => {
+                updateKeyboardHeight(
+                    info.keyboardHeight
+                );
+                onKeyboardSettled();
+            }
+        )
+    );
+
+    register(
+        Keyboard.addListener(
+            'keyboardWillHide',
+            onKeyboardWillChange
         )
     );
 
@@ -114,6 +166,8 @@ export function observeIosLifecycle(
                 document.documentElement.classList.remove(
                     'camplink-keyboard-open'
                 );
+
+                updateKeyboardHeight(0);
                 onKeyboardSettled();
             }
         )
@@ -130,6 +184,7 @@ export function observeIosLifecycle(
 
     return () => {
         disposed = true;
+        updateKeyboardHeight(0);
 
         document.documentElement.classList.remove(
             'camplink-keyboard-open'

@@ -583,6 +583,53 @@ export function createAppServer(options = {}) {
             userId: user.id,
         });
 
+        socket.on('chat:read', (payload, acknowledgement) => {
+            const reply =
+                typeof acknowledgement === 'function'
+                    ? acknowledgement
+                    : () => {};
+
+            if (!store.getSessionUser(
+                socket.data.sessionToken
+            )) {
+                socket.disconnect(true);
+                return reply({
+                    ok: false,
+                    error: 'Unauthorized',
+                });
+            }
+
+            const peerId = payload?.peerId;
+            const throughId = payload?.throughId;
+
+            const result = store.markConversationRead(
+                user.id, peerId, throughId
+            );
+
+            if (!result) {
+                return reply({
+                    ok: false,
+                    error: 'Invalid read receipt',
+                });
+            }
+
+            if (result.changed) {
+                io.to(`user:${peerId}`).emit(
+                    'chat:read',
+                    {
+                        readerId: user.id,
+                        throughId: result.throughId,
+                        readAt: result.readAt,
+                    }
+                );
+            }
+
+            reply({
+                ok: true,
+                throughId: result.throughId,
+            });
+        });
+
         socket.on('chat:send', (payload, acknowledgement) => {
             const reply =
                 typeof acknowledgement === 'function'

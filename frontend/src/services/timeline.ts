@@ -8,6 +8,7 @@ export type ConfirmedMessage = {
     clientMessageId: string;
     text: string;
     createdAt: string;
+    readAt?: string | null;
 };
 
 export type TimelineItem =

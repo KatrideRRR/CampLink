@@ -11,6 +11,7 @@ export type OfflineMessage = {
     clientMessageId: string;
     text: string;
     createdAt: string;
+    readAt?: string | null;
 };
 
 type StorageLike = Pick<

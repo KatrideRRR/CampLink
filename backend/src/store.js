@@ -115,6 +115,18 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
 
     CREATE INDEX IF NOT EXISTS idx_push_devices_user
       ON push_devices(user_id);
+
+    CREATE TABLE IF NOT EXISTS message_reads (
+      reader_id INTEGER NOT NULL,
+      peer_id INTEGER NOT NULL,
+      last_read_message_id INTEGER NOT NULL,
+      read_at TEXT NOT NULL,
+      PRIMARY KEY (reader_id, peer_id),
+      FOREIGN KEY (reader_id)
+        REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (peer_id)
+        REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
     const messageColumns = db.pragma(
@@ -144,7 +156,14 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                     created_at
             ) AS createdAt,
             client_created_at AS clientCreatedAt,
-            created_at AS serverReceivedAt
+            created_at AS serverReceivedAt,
+            (
+                SELECT r.read_at
+                FROM message_reads r
+                WHERE r.reader_id = messages.recipient_id
+                  AND r.peer_id = messages.sender_id
+                  AND r.last_read_message_id >= messages.id
+            ) AS readAt
         FROM messages
         WHERE id = ?
     `);
@@ -378,6 +397,56 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             };
         },
 
+        markConversationRead(readerId, peerId, throughId) {
+            if (
+                !Number.isSafeInteger(readerId) ||
+                !Number.isSafeInteger(peerId) ||
+                !Number.isSafeInteger(throughId) ||
+                readerId <= 0 ||
+                peerId <= 0 ||
+                throughId <= 0 ||
+                readerId === peerId
+            ) {
+                return null;
+            }
+
+            const target = db.prepare(`
+                SELECT id FROM messages
+                WHERE id = ?
+                  AND sender_id = ?
+                  AND recipient_id = ?
+            `).get(throughId, peerId, readerId);
+
+            if (!target) return null;
+
+            const readAt = new Date().toISOString();
+
+            const result = db.prepare(`
+                INSERT INTO message_reads (
+                    reader_id, peer_id,
+                    last_read_message_id, read_at
+                )
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(reader_id, peer_id)
+                DO UPDATE SET
+                    last_read_message_id =
+                        excluded.last_read_message_id,
+                    read_at = excluded.read_at
+                WHERE excluded.last_read_message_id >
+                    message_reads.last_read_message_id
+            `).run(
+                readerId, peerId, throughId, readAt
+            );
+
+            return {
+                changed: result.changes > 0,
+                readerId,
+                peerId,
+                throughId,
+                readAt,
+            };
+        },
+
         getConversation(userId, peerId) {
             const rows = db.prepare(`
                 SELECT
@@ -391,7 +460,14 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                             created_at
                     ) AS createdAt,
                     client_created_at AS clientCreatedAt,
-                    created_at AS serverReceivedAt
+                    created_at AS serverReceivedAt,
+                    (
+                        SELECT r.read_at
+                        FROM message_reads r
+                        WHERE r.reader_id = messages.recipient_id
+                          AND r.peer_id = messages.sender_id
+                          AND r.last_read_message_id >= messages.id
+                    ) AS readAt
                 FROM messages
                 WHERE
                     (sender_id = ? AND recipient_id = ?)

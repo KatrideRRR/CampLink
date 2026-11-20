@@ -52,6 +52,10 @@ import {
 } from './services/relay';
 import { deliverMessage } from './services/delivery';
 import {
+    applyReadReceipt,
+    type ReadReceipt,
+} from './services/read-receipts';
+import {
     selectNextPendingMessage,
 } from './services/outbox-selection';
 import type { MessageTransport } from './services/transports';
@@ -77,6 +81,7 @@ type ChatMessage = {
     clientMessageId: string;
     text: string;
     createdAt: string;
+    readAt?: string | null;
 };
 
 type SendResponse = {
@@ -326,6 +331,10 @@ function App() {
     const [showJumpToBottom, setShowJumpToBottom] =
         useState(false);
 
+    const lastReadSentRef = useRef<string | null>(null);
+    const readPendingRef = useRef<string | null>(null);
+    const keyboardFollowBottomRef = useRef(true);
+
     useEffect(() => {
         if (!me || pendingPushPeerId === null) return;
 
@@ -384,17 +393,20 @@ function App() {
         };
 
         const scrollToLatest = () => {
+            if (!keyboardFollowBottomRef.current) return;
+
             window.requestAnimationFrame(() => {
                 window.requestAnimationFrame(() => {
                     const list = messageListRef.current;
-                    if (list) {
-                        list.scrollTo({
+
+                    if (!list) return;
+
+                    list.scrollTo({
                         top: list.scrollHeight,
-                        behavior: window.matchMedia(
-                            '(prefers-reduced-motion: reduce)'
-                        ).matches ? 'auto' : 'smooth',
+                        behavior: 'auto',
                     });
-                    }
+
+                    nearBottomRef.current = true;
                 });
             });
         };
@@ -411,6 +423,10 @@ function App() {
                 if (available) {
                     socket.connect();
                 }
+            },
+            () => {
+                keyboardFollowBottomRef.current =
+                    nearBottomRef.current;
             }
         );
     }, []);
@@ -428,6 +444,94 @@ function App() {
                 selectedPeerId
             )
             : [];
+
+    function markVisibleMessagesRead() {
+        const socket = socketRef.current;
+
+        if (
+            !me ||
+            !socket?.connected ||
+            selectedPeerId === null ||
+            document.visibilityState !== 'visible' ||
+            (mobileView && !mobileChatOpen) ||
+            !nearBottomRef.current
+        ) {
+            return;
+        }
+
+        const lastIncomingId = messages.reduce(
+            (maximum, message) => {
+                if (
+                    message.senderId === selectedPeerId &&
+                    message.recipientId === me.id
+                ) {
+                    return Math.max(maximum, message.id);
+                }
+
+                return maximum;
+            },
+            0
+        );
+
+        if (lastIncomingId === 0) return;
+
+        const key =
+            `${me.id}:${selectedPeerId}:${lastIncomingId}`;
+
+        if (
+            lastReadSentRef.current === key ||
+            readPendingRef.current === key
+        ) {
+            return;
+        }
+
+        readPendingRef.current = key;
+
+        socket.timeout(5000).emit(
+            'chat:read',
+            {
+                peerId: selectedPeerId,
+                throughId: lastIncomingId,
+            },
+            (
+                error: Error | null,
+                response?: { ok?: boolean }
+            ) => {
+                if (readPendingRef.current === key) {
+                    readPendingRef.current = null;
+                }
+
+                if (!error && response?.ok) {
+                    lastReadSentRef.current = key;
+                }
+            }
+        );
+    }
+
+    useEffect(() => {
+        const update = () => markVisibleMessagesRead();
+
+        update();
+
+        document.addEventListener(
+            'visibilitychange', update
+        );
+        window.addEventListener('focus', update);
+
+        return () => {
+            document.removeEventListener(
+                'visibilitychange', update
+            );
+            window.removeEventListener('focus', update);
+        };
+    }, [
+        me,
+        messages,
+        selectedPeerId,
+        connected,
+        mobileView,
+        mobileChatOpen,
+    ]);
 
     function previewFor(peerId: number): string {
         if (!me) return '';
@@ -808,6 +912,43 @@ function App() {
             setOnlineIds([]);
         });
 
+        socket.on('chat:read', (receipt: ReadReceipt) => {
+            if (
+                !active ||
+                !Number.isSafeInteger(receipt?.readerId) ||
+                receipt.readerId === me.id
+            ) {
+                return;
+            }
+
+            const history = readOfflineMessages(
+                me.id, receipt.readerId
+            );
+
+            const updated = applyReadReceipt(
+                history, me.id, receipt
+            );
+
+            if (updated !== history) {
+                saveOfflineMessages(
+                    me.id,
+                    receipt.readerId,
+                    updated
+                );
+                snapshotChatNow(me.id);
+            }
+
+            if (
+                selectedPeerRef.current === receipt.readerId
+            ) {
+                setMessages(current =>
+                    applyReadReceipt(
+                        current, me.id, receipt
+                    )
+                );
+            }
+        });
+
         socket.on('chat:new', (message: ChatMessage) => {
 
             const partnerId =
@@ -1038,6 +1179,10 @@ function App() {
             !nearBottom &&
             list.scrollHeight > list.clientHeight + 120
         );
+
+        if (nearBottom) {
+            markVisibleMessagesRead();
+        }
     }
 
     function scrollToChatBottom(
@@ -1174,6 +1319,8 @@ function App() {
             await clearIosSnapshot();
         }
         setPendingMessages([]);
+        lastReadSentRef.current = null;
+        readPendingRef.current = null;
         socketRef.current?.disconnect();
         selectedPeerRef.current = null;
         setMe(null);
@@ -1460,6 +1607,10 @@ function App() {
 
                                 const message = item.message;
 
+                                const isRead =
+                                    item.status === 'confirmed' &&
+                                    Boolean(item.message.readAt);
+
                                 const key = isPending
                                     ? `pending:${message.clientMessageId}`
                                     : `confirmed:${item.message.id}`;
@@ -1484,12 +1635,38 @@ function App() {
                                                     : connected
                                                         ? 'Отправляем...'
                                                         : 'В очереди · ожидаем связь'
-                                                : new Date(
-                                                    message.createdAt
-                                                ).toLocaleTimeString('ru-RU', {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                })}
+                                                : (
+                                                    <>
+                                                        {new Date(
+                                                            message.createdAt
+                                                        ).toLocaleTimeString(
+                                                            'ru-RU',
+                                                            {
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                            }
+                                                        )}
+
+                                                        {isOutgoing && (
+                                                            <span
+                                                                className={
+                                                                    `receipt-icon ${
+                                                                        isRead
+                                                                            ? 'is-read'
+                                                                            : ''
+                                                                    }`
+                                                                }
+                                                                title={
+                                                                    isRead
+                                                                        ? 'Прочитано'
+                                                                        : 'Отправлено на сервер'
+                                                                }
+                                                            >
+                                                                {isRead ? '✓✓' : '✓'}
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                )}
                                         </small>
                                     </div>
                                 );
