@@ -1,11 +1,25 @@
 import {
     createHash,
+    randomUUID,
     timingSafeEqual,
 } from 'node:crypto';
 import express from 'express';
+import {
+    mkdirSync,
+    writeFileSync,
+    unlinkSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
+import {
+    inspectMedia,
+    MAX_MEDIA_BYTES,
+} from './media-format.js';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { createStore } from './store.js';
+import {
+    createStore,
+    DEFAULT_DB_PATH,
+} from './store.js';
 import {
     issueRelayTicket,
 } from '../../shared/relay-ticket.js';
@@ -56,6 +70,20 @@ const cookieOptions = {
 
 export function createAppServer(options = {}) {
     const store = createStore(options.databasePath);
+
+    const mediaDirectory =
+        options.mediaDirectory ??
+        process.env.CAMPLINK_MEDIA_DIRECTORY ??
+        join(
+            dirname(
+                options.databasePath &&
+                options.databasePath !== ':memory:'
+                    ? options.databasePath
+                    : DEFAULT_DB_PATH
+            ),
+            'media'
+        );
+
     const app = express();
 
     app.disable('x-powered-by');
@@ -510,6 +538,172 @@ export function createAppServer(options = {}) {
 
         res.clearCookie(COOKIE_NAME, cookieOptions);
         res.json({ ok: true });
+    });
+
+    app.post(
+        '/api/media/send',
+        requireAuth,
+        express.raw({
+            type: '*/*',
+            limit: MAX_MEDIA_BYTES,
+        }),
+        (req, res) => {
+            const origin = req.get('origin');
+
+            if (
+                origin &&
+                !allowedOrigins.includes(origin) &&
+                !nativeOrigins.has(origin)
+            ) {
+                return res.status(403).json({
+                    error: 'Forbidden origin',
+                });
+            }
+
+            const recipientId = Number(
+                req.query.toUserId
+            );
+            const clientMessageId =
+                req.query.clientMessageId;
+            const kind = req.query.kind;
+            const rawReplyTo = req.query.replyToMessageId;
+
+            const replyToMessageId =
+                rawReplyTo === undefined
+                    ? null
+                    : Number(rawReplyTo);
+
+            const mimeType = (
+                req.get('content-type') ?? ''
+            ).split(';')[0].trim().toLowerCase();
+
+            const valid =
+                inspectMedia(kind, mimeType, req.body);
+
+            if (
+                !valid ||
+                !Number.isSafeInteger(recipientId) ||
+                recipientId <= 0 ||
+                recipientId === req.user.id ||
+                !store.getUserById(recipientId) ||
+                typeof clientMessageId !== 'string' ||
+                !/^[a-f0-9-]{36}$/i.test(clientMessageId) ||
+                (
+                    replyToMessageId !== null &&
+                    (
+                        !Number.isSafeInteger(replyToMessageId) ||
+                        replyToMessageId <= 0
+                    )
+                )
+            ) {
+                return res.status(400).json({
+                    error: 'Invalid media message',
+                });
+            }
+
+            const mediaId = randomUUID();
+            const fileName =
+                mediaId + '.' + valid.extension;
+            const path = join(mediaDirectory, fileName);
+
+            try {
+                mkdirSync(mediaDirectory, {
+                    recursive: true,
+                    mode: 0o700,
+                });
+
+                writeFileSync(path, req.body, {
+                    flag: 'wx',
+                    mode: 0o600,
+                });
+            } catch {
+                return res.status(500).json({
+                    error: 'Media storage unavailable',
+                });
+            }
+
+            try {
+                const result = store.saveMediaMessage({
+                    senderId: req.user.id,
+                    recipientId,
+                    clientMessageId,
+                    replyToMessageId,
+                    mediaId,
+                    kind,
+                    mimeType,
+                    fileName,
+                    bytes: req.body.length,
+                });
+
+                if (!result.created) {
+                    unlinkSync(path);
+                } else {
+                    io.to('user:' + req.user.id)
+                        .to('user:' + recipientId)
+                        .emit('chat:new', result.message);
+
+                    emitUnreadCount(
+                        recipientId,
+                        req.user.id
+                    );
+
+                    deliverPush(result.message);
+                }
+
+                return res.status(
+                    result.created ? 201 : 200
+                ).json({
+                    ok: true,
+                    message: result.message,
+                });
+            } catch (error) {
+                try {
+                    unlinkSync(path);
+                } catch {
+                    // Cleanup failure is logged below.
+                }
+
+                console.error(
+                    '[Media] Message save failed:',
+                    error?.message
+                );
+
+                return res.status(400).json({
+                    error: 'Media message could not be saved',
+                });
+            }
+        }
+    );
+
+    app.get('/api/media/:id', requireAuth, (req, res) => {
+        const record = store.getMediaForUser(
+            req.user.id,
+            req.params.id
+        );
+
+        if (!record) {
+            return res.status(404).json({
+                error: 'Media not found',
+            });
+        }
+
+        res.set({
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy':
+                "default-src 'none'",
+        });
+
+        res.type(record.mimeType);
+
+        return res.sendFile(
+            join(mediaDirectory, record.fileName),
+            (error) => {
+                if (error && !res.headersSent) {
+                    res.status(404).end();
+                }
+            }
+        );
     });
 
     app.get('/api/users', requireAuth, (req, res) => {

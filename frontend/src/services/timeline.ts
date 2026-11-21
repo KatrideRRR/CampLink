@@ -1,7 +1,10 @@
+import type { MessageMedia } from './media-types';
 
 import type { QueuedMessage } from './outbox';
 
 export type ConfirmedMessage = {
+    media?: MessageMedia;
+
     id: number;
     senderId: number;
     recipientId: number;

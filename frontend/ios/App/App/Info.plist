@@ -8,7 +8,7 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
         <string>CampLink</string>
-	<key>CFBundleExecutable</key>
+	\n    <key>NSMicrophoneUsageDescription</key>\n    <string>CampLink использует микрофон для голосовых сообщений.</string>\n\t\n    <key>NSCameraUsageDescription</key>\n    <string>CampLink использует камеру для отправки фотографий.</string>\n\t\n    <key>NSPhotoLibraryUsageDescription</key>\n    <string>CampLink позволяет выбирать фотографии из галереи.</string>\n\t<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>

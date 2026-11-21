@@ -116,6 +116,17 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_push_devices_user
       ON push_devices(user_id);
 
+    CREATE TABLE IF NOT EXISTS media_attachments (
+      id TEXT PRIMARY KEY,
+      message_id INTEGER NOT NULL UNIQUE,
+      kind TEXT NOT NULL CHECK (kind IN ('image', 'voice')),
+      mime_type TEXT NOT NULL,
+      file_name TEXT NOT NULL UNIQUE,
+      bytes INTEGER NOT NULL CHECK (bytes > 0),
+      FOREIGN KEY (message_id)
+        REFERENCES messages(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS message_reactions (
       message_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
@@ -204,6 +215,12 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
         WHERE id = ?
     `);
 
+    const selectMedia = db.prepare(`
+        SELECT id, kind, mime_type AS mimeType, bytes
+        FROM media_attachments
+        WHERE message_id = ?
+    `);
+
     const listReactions = db.prepare(`
         SELECT user_id AS userId, emoji
         FROM message_reactions
@@ -213,8 +230,11 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
 
     function decorateMessage(row) {
         if (!row) return null;
+        const media = selectMedia.get(row.id);
+
         return {
             ...row,
+            ...(media ? { media } : {}),
             reactions: listReactions.all(row.id),
         };
     }
@@ -504,6 +524,95 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                     selectMessage.get(row.id)
                 ),
             };
+        },
+
+        saveMediaMessage({
+            senderId,
+            recipientId,
+            clientMessageId,
+            clientCreatedAt,
+            replyToMessageId = null,
+            mediaId,
+            kind,
+            mimeType,
+            fileName,
+            bytes,
+        }) {
+            if (
+                !['image', 'voice'].includes(kind) ||
+                typeof mediaId !== 'string' ||
+                typeof mimeType !== 'string' ||
+                typeof fileName !== 'string' ||
+                !Number.isSafeInteger(bytes) ||
+                bytes <= 0
+            ) {
+                throw new Error('Invalid attachment');
+            }
+
+            return db.transaction(() => {
+                const result = this.saveMessage({
+                    senderId,
+                    recipientId,
+                    clientMessageId,
+                    clientCreatedAt,
+                    replyToMessageId,
+                    text: kind === 'image'
+                        ? 'Фото'
+                        : 'Голосовое сообщение',
+                });
+
+                if (result.created) {
+                    db.prepare(`
+                        INSERT INTO media_attachments (
+                            id, message_id, kind,
+                            mime_type, file_name, bytes
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    `).run(
+                        mediaId,
+                        result.message.id,
+                        kind,
+                        mimeType,
+                        fileName,
+                        bytes
+                    );
+                } else {
+                    const existing =
+                        selectMedia.get(result.message.id);
+
+                    if (
+                        !existing ||
+                        existing.kind !== kind
+                    ) {
+                        throw new Error(
+                            'Media message ID conflict'
+                        );
+                    }
+                }
+
+                return {
+                    created: result.created,
+                    message: decorateMessage(
+                        selectMessage.get(result.message.id)
+                    ),
+                };
+            })();
+        },
+
+        getMediaForUser(userId, mediaId) {
+            return db.prepare(`
+                SELECT a.id,
+                       a.kind,
+                       a.mime_type AS mimeType,
+                       a.file_name AS fileName,
+                       a.bytes
+                FROM media_attachments a
+                JOIN messages m ON m.id = a.message_id
+                WHERE a.id = ?
+                  AND (
+                      m.sender_id = ?
+                      OR m.recipient_id = ?
+                  )
+            `).get(mediaId, userId, userId) ?? null;
         },
 
         toggleReaction(userId, messageId, emoji) {

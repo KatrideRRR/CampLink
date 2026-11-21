@@ -1,3 +1,4 @@
+import type { MessageMedia } from './services/media-types';
 import {
     useEffect,
     useLayoutEffect,
@@ -84,6 +85,7 @@ import {
     saveUnreadCounts,
     clearUnreadCounts,
 } from './services/unread-chats';
+import { MediaBubble } from './components/MediaBubble';
 import './App.css';
 
 type User = {
@@ -92,6 +94,8 @@ type User = {
 };
 
 type ChatMessage = {
+    media?: MessageMedia;
+
     id: number;
     senderId: number;
     recipientId: number;
@@ -333,6 +337,41 @@ function App() {
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
+
+    const galleryInputRef =
+        useRef<HTMLInputElement | null>(null);
+
+    const cameraInputRef =
+        useRef<HTMLInputElement | null>(null);
+
+    const voiceRecorderRef =
+        useRef<MediaRecorder | null>(null);
+
+    const voiceStreamRef =
+        useRef<MediaStream | null>(null);
+
+    const voiceTimerRef =
+        useRef<number | null>(null);
+
+    const cancelRecordingRef = useRef(false);
+
+    const [recordingVoice, setRecordingVoice] =
+        useState(false);
+
+    const [uploadingMedia, setUploadingMedia] =
+        useState(false);
+
+    const [mediaMenuOpen, setMediaMenuOpen] =
+        useState(false);
+
+    const [pendingMedia, setPendingMedia] =
+        useState<{
+            blob: Blob;
+            kind: 'image' | 'voice';
+            peerId: number;
+            clientMessageId: string;
+            replyToMessageId: number | null;
+        } | null>(null);
     const [replyTo, setReplyTo] =
         useState<ChatMessage | null>(null);
     const [reactionMenuMessageId, setReactionMenuMessageId] =
@@ -1803,6 +1842,324 @@ function App() {
     }
 
 
+    async function preparePhoto(file: File): Promise<Blob> {
+        if (
+            !file.type.startsWith('image/') ||
+            file.size > 30 * 1024 * 1024
+        ) {
+            throw new Error('Неподдерживаемая фотография');
+        }
+
+        const bitmap = await createImageBitmap(file);
+
+        try {
+            const scale = Math.min(
+                1,
+                1920 / Math.max(bitmap.width, bitmap.height)
+            );
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(
+                1, Math.round(bitmap.width * scale)
+            );
+            canvas.height = Math.max(
+                1, Math.round(bitmap.height * scale)
+            );
+
+            const context = canvas.getContext('2d');
+
+            if (!context) {
+                throw new Error('Ошибка обработки фотографии');
+            }
+
+            context.fillStyle = '#ffffff';
+            context.fillRect(
+                0, 0, canvas.width, canvas.height
+            );
+            context.drawImage(
+                bitmap, 0, 0, canvas.width, canvas.height
+            );
+
+            const result = await new Promise<Blob | null>(
+                resolve => canvas.toBlob(
+                    resolve, 'image/jpeg', 0.82
+                )
+            );
+
+            if (!result) {
+                throw new Error('Ошибка сжатия фотографии');
+            }
+
+            return result;
+        } finally {
+            bitmap.close();
+        }
+    }
+
+    async function sendPreparedMedia(
+        item: {
+            blob: Blob;
+            kind: 'image' | 'voice';
+            peerId: number;
+            clientMessageId: string;
+            replyToMessageId: number | null;
+        }
+    ) {
+        if (!me || uploadingMedia) return;
+
+        if (!connected) {
+            setPendingMedia(item);
+            setError(
+                'Нет соединения. Вложение сохранено ' +
+                'до закрытия приложения. Повторите отправку.'
+            );
+            return;
+        }
+
+        if (item.blob.size > 8 * 1024 * 1024) {
+            setError('Вложение превышает 8 МБ');
+            return;
+        }
+
+        setUploadingMedia(true);
+        setError('');
+
+        const params = new URLSearchParams({
+            toUserId: String(item.peerId),
+            clientMessageId: item.clientMessageId,
+            kind: item.kind,
+        });
+
+        if (item.replyToMessageId !== null) {
+            params.set(
+                'replyToMessageId',
+                String(item.replyToMessageId)
+            );
+        }
+
+        try {
+            const response = await apiFetch(
+                `/api/media/send?${params.toString()}`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': item.blob.type,
+                    },
+                    body: item.blob,
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error('Загрузка не удалась');
+            }
+
+            const result = await response.json() as {
+                ok: boolean;
+                message?: ChatMessage;
+            };
+
+            if (!result.ok || !result.message) {
+                throw new Error('Нет подтверждения сервера');
+            }
+
+            const message = result.message;
+
+            saveOfflineMessages(
+                me.id, item.peerId, [message]
+            );
+
+            snapshotChatNow(me.id);
+
+            if (selectedPeerRef.current === item.peerId) {
+                setMessages(current =>
+                    mergeMessages(current, [message])
+                );
+            }
+
+            setPeers(current => [...current]);
+            setPendingMedia(null);
+            setReplyTo(null);
+            setError('');
+            forceScrollAfterSendRef.current = true;
+        } catch {
+            setPendingMedia(item);
+            setError(
+                'Вложение не отправлено. ' +
+                'Нажмите «Повторить».'
+            );
+        } finally {
+            setUploadingMedia(false);
+        }
+    }
+
+    async function choosePhoto(file?: File) {
+        if (!file || selectedPeerId === null) return;
+
+        try {
+            const blob = await preparePhoto(file);
+
+            await sendPreparedMedia({
+                blob,
+                kind: 'image',
+                peerId: selectedPeerId,
+                clientMessageId: crypto.randomUUID(),
+                replyToMessageId: replyTo?.id ?? null,
+            });
+        } catch {
+            setError(
+                'Не удалось обработать фото. ' +
+                'Попробуйте JPEG или PNG.'
+            );
+        }
+    }
+
+    function stopVoiceRecording(cancel = false) {
+        const recorder = voiceRecorderRef.current;
+
+        cancelRecordingRef.current = cancel;
+
+        if (voiceTimerRef.current !== null) {
+            window.clearTimeout(voiceTimerRef.current);
+            voiceTimerRef.current = null;
+        }
+
+        if (recorder?.state === 'recording') {
+            recorder.stop();
+        }
+
+        voiceStreamRef.current?.getTracks().forEach(
+            track => track.stop()
+        );
+
+        voiceStreamRef.current = null;
+        setRecordingVoice(false);
+    }
+
+    async function toggleVoiceRecording() {
+        if (recordingVoice) {
+            stopVoiceRecording();
+            return;
+        }
+
+        if (
+            !me ||
+            selectedPeerId === null ||
+            uploadingMedia ||
+            !connected
+        ) {
+            setError('Для голосовых нужна связь с сервером');
+            return;
+        }
+
+        if (
+            !navigator.mediaDevices?.getUserMedia ||
+            typeof MediaRecorder === 'undefined'
+        ) {
+            setError('Запись аудио недоступна на устройстве');
+            return;
+        }
+
+        let stream: MediaStream | null = null;
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+            });
+
+            const choices = [
+                'audio/mp4',
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+            ];
+
+            const mimeType = choices.find(
+                candidate => MediaRecorder.isTypeSupported(
+                    candidate
+                )
+            );
+
+            if (!mimeType) {
+                throw new Error('Audio format not supported');
+            }
+
+            const recorder = new MediaRecorder(
+                stream,
+                { mimeType }
+            );
+
+            const chunks: Blob[] = [];
+            const targetPeerId = selectedPeerId;
+            const targetReplyId = replyTo?.id ?? null;
+
+            recorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+
+            recorder.onstop = () => {
+                stream?.getTracks().forEach(
+                    track => track.stop()
+                );
+
+                const cancelled = cancelRecordingRef.current;
+
+                voiceRecorderRef.current = null;
+                voiceStreamRef.current = null;
+                setRecordingVoice(false);
+
+                if (cancelled || chunks.length === 0) {
+                    return;
+                }
+
+                const normalizedMime =
+                    recorder.mimeType.split(';')[0];
+
+                const blob = new Blob(chunks, {
+                    type: normalizedMime,
+                });
+
+                void sendPreparedMedia({
+                    blob,
+                    kind: 'voice',
+                    peerId: targetPeerId,
+                    clientMessageId: crypto.randomUUID(),
+                    replyToMessageId: targetReplyId,
+                });
+            };
+
+            recorder.onerror = () => {
+                cancelRecordingRef.current = true;
+                setError('Ошибка записи с микрофона');
+                stopVoiceRecording(true);
+            };
+
+            cancelRecordingRef.current = false;
+            voiceRecorderRef.current = recorder;
+            voiceStreamRef.current = stream;
+
+            recorder.start(250);
+            setRecordingVoice(true);
+            setError('');
+
+            // Maximum recording: 90 seconds.
+            voiceTimerRef.current = window.setTimeout(
+                () => stopVoiceRecording(),
+                90000
+            );
+        } catch {
+            stream?.getTracks().forEach(
+                track => track.stop()
+            );
+
+            setError(
+                'Не удалось начать запись. ' +
+                'Проверьте доступ к микрофону.'
+            );
+        }
+    }
+
     function handleSend(event: FormEvent) {
         event.preventDefault();
 
@@ -2185,9 +2542,16 @@ function App() {
                                             </div>
                                         )}
 
-                                        <div className="message-text">
-                                            {message.text}
-                                        </div>
+                                        {confirmedMessage?.media ? (
+                                            <MediaBubble
+                                                media={confirmedMessage.media}
+                                                connected={connected}
+                                            />
+                                        ) : (
+                                            <div className="message-text">
+                                                {message.text}
+                                            </div>
+                                        )}
 
                                         <small>
                                             {item.status === 'pending'
@@ -2342,10 +2706,108 @@ function App() {
                             </div>
                         )}
 
+                        {pendingMedia && (
+                            <div className="media-retry">
+                                <span>
+                                    Вложение ожидает отправки
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={uploadingMedia}
+                                    onClick={() => void sendPreparedMedia(
+                                        pendingMedia
+                                    )}
+                                >
+                                    Повторить
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={uploadingMedia}
+                                    onClick={() => setPendingMedia(null)}
+                                >
+                                    Удалить
+                                </button>
+                            </div>
+                        )}
+
                         <form
                             className="composer"
                             onSubmit={handleSend}
                         >
+                            <input
+                                ref={galleryInputRef}
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={event => {
+                                    const file =
+                                        event.currentTarget.files?.[0];
+                                    event.currentTarget.value = '';
+                                    void choosePhoto(file);
+                                }}
+                            />
+
+                            <input
+                                ref={cameraInputRef}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                style={{ display: 'none' }}
+                                onChange={event => {
+                                    const file =
+                                        event.currentTarget.files?.[0];
+                                    event.currentTarget.value = '';
+                                    void choosePhoto(file);
+                                }}
+                            />
+
+                            <div className="composer-attach">
+                                <button
+                                    type="button"
+                                    className="composer-plus"
+                                    aria-label="Прикрепить"
+                                    aria-expanded={mediaMenuOpen}
+                                    disabled={
+                                        !connected ||
+                                        uploadingMedia ||
+                                        recordingVoice
+                                    }
+                                    onClick={() =>
+                                        setMediaMenuOpen(open => !open)
+                                    }
+                                >
+                                    +
+                                </button>
+
+                                {mediaMenuOpen && (
+                                    <div
+                                        className="composer-menu"
+                                        role="group"
+                                        aria-label="Выбрать вложение"
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMediaMenuOpen(false);
+                                                cameraInputRef.current?.click();
+                                            }}
+                                        >
+                                            📷 Камера
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMediaMenuOpen(false);
+                                                galleryInputRef.current?.click();
+                                            }}
+                                        >
+                                            🖼 Галерея
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
                             <textarea
                                 ref={composerInputRef}
                                 value={draft}
@@ -2359,17 +2821,60 @@ function App() {
                                 maxLength={2000}
                             />
 
-                            <button
-                                type="submit"
-                                disabled={!draft.trim()}
-                                onMouseDown={(event) => {
-                                    if (mobileView) {
-                                        event.preventDefault();
+                            {recordingVoice ? (
+                                <div className="composer-record-actions">
+                                    <button
+                                        type="button"
+                                        className="composer-main-action"
+                                        aria-label="Остановить и отправить запись"
+                                        onClick={() =>
+                                            stopVoiceRecording(false)
+                                        }
+                                    >
+                                        ■
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className="composer-cancel"
+                                        aria-label="Отменить запись"
+                                        onClick={() =>
+                                            stopVoiceRecording(true)
+                                        }
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ) : draft.trim() ? (
+                                <button
+                                    type="submit"
+                                    className="composer-main-action"
+                                    aria-label="Отправить сообщение"
+                                    disabled={uploadingMedia}
+                                    onMouseDown={(event) => {
+                                        if (mobileView) {
+                                            event.preventDefault();
+                                        }
+                                    }}
+                                >
+                                    ↑
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="composer-main-action"
+                                    aria-label="Записать голосовое сообщение"
+                                    disabled={
+                                        !connected || uploadingMedia
                                     }
-                                }}
-                            >
-                                Отправить
-                            </button>
+                                    onClick={() => {
+                                        setMediaMenuOpen(false);
+                                        void toggleVoiceRecording();
+                                    }}
+                                >
+                                    🎤
+                                </button>
+                            )}
                         </form>
                     </>
                 ) : (

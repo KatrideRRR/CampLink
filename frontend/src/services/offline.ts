@@ -1,3 +1,4 @@
+import type { MessageMedia } from './media-types';
 
 export type OfflineUser = {
     id: number;
@@ -5,6 +6,8 @@ export type OfflineUser = {
 };
 
 export type OfflineMessage = {
+    media?: MessageMedia;
+
     id: number;
     senderId: number;
     recipientId: number;

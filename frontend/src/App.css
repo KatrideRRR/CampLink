@@ -1144,3 +1144,266 @@ body {
         transition: none;
     }
 }
+
+/* CampLink media messages */
+
+.composer .media-action {
+    flex: 0 0 38px;
+    width: 38px;
+    min-height: 42px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    border-radius: 12px;
+}
+
+.composer .media-action.is-recording {
+    background: #ff6475;
+    color: #211115;
+    animation: recording-pulse 1.3s ease-in-out infinite;
+}
+
+.composer button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+@keyframes recording-pulse {
+    50% { opacity: .6; }
+}
+
+.media-photo {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 100%;
+    cursor: pointer;
+}
+
+.media-photo img {
+    display: block;
+    width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    border-radius: 12px;
+}
+
+.voice-message {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 200px;
+    max-width: 100%;
+}
+
+.voice-message span {
+    font-size: 12px;
+}
+
+.voice-message audio {
+    display: block;
+    width: 100%;
+    max-width: 280px;
+}
+
+.media-placeholder {
+    padding: 12px;
+    max-width: 240px;
+    font-size: 12px;
+    color: #aeb6be;
+}
+
+.media-retry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.media-retry button {
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: #e8ff72;
+    color: #181b20;
+    font-weight: 700;
+}
+
+.media-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.94);
+    padding: 20px;
+}
+
+.media-lightbox img {
+    max-width: 95vw;
+    max-height: 85vh;
+    object-fit: contain;
+}
+
+.media-lightbox button {
+    position: absolute;
+    top: max(20px, env(safe-area-inset-top));
+    right: 20px;
+    border: 0;
+    border-radius: 9px;
+    padding: 10px 14px;
+}
+
+@media (max-width: 900px) {
+    .messenger.is-mobile .composer {
+        gap: 5px;
+    }
+
+    .messenger.is-mobile .composer .media-action {
+        flex-basis: 34px;
+        width: 34px;
+        min-height: 42px;
+        padding: 0;
+    }
+
+    .messenger.is-mobile .composer button[type='submit'] {
+        padding: 10px 8px;
+        font-size: 12px;
+    }
+
+    .message:has(.media-photo),
+    .message:has(.voice-message) {
+        max-width: 85%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .composer .media-action.is-recording {
+        animation: none;
+    }
+}
+
+
+/* Compact CampLink composer */
+
+.composer {
+    position: relative;
+    z-index: 3;
+    align-items: flex-end;
+    gap: 7px;
+}
+
+.composer-attach {
+    position: relative;
+    flex: 0 0 40px;
+}
+
+.composer button.composer-plus,
+.composer button.composer-main-action,
+.composer button.composer-cancel {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 22px;
+    font-size: 23px;
+    line-height: 1;
+}
+
+.composer button.composer-plus {
+    background: #353941;
+    color: #fff;
+    font-size: 30px;
+    font-weight: 400;
+}
+
+.composer button.composer-main-action {
+    background: #e8ff72;
+    color: #151515;
+    font-weight: 800;
+}
+
+.composer button.composer-cancel {
+    background: #454951;
+    color: #fff;
+}
+
+.composer-record-actions {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+}
+
+.composer-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 10px);
+    z-index: 30;
+    min-width: 155px;
+    padding: 6px;
+    background: #292d34;
+    border: 1px solid #484c54;
+    border-radius: 13px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, .3);
+}
+
+.composer .composer-menu button {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    text-align: left;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.composer .composer-menu button:hover {
+    background: rgba(255,255,255,.09);
+}
+
+:root[data-theme='light'] .composer button.composer-plus {
+    background: #e2e7ec;
+    color: #202328;
+}
+
+:root[data-theme='light'] .composer-menu {
+    background: #fff;
+    border-color: #dce1e6;
+}
+
+:root[data-theme='light'] .composer .composer-menu button {
+    color: #202328;
+}
+
+:root[data-theme='light'] .composer .composer-menu button:hover {
+    background: #f0f2f5;
+}
+
+@media (max-width: 900px) {
+    .messenger.is-mobile .composer button.composer-plus,
+    .messenger.is-mobile .composer button.composer-main-action,
+    .messenger.is-mobile .composer button.composer-cancel {
+        width: 36px;
+        height: 42px;
+        min-height: 42px;
+        padding: 0;
+    }
+
+    .messenger.is-mobile .composer-attach {
+        flex-basis: 36px;
+    }
+}
