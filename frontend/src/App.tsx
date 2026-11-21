@@ -2704,7 +2704,14 @@ function App() {
                 </div>
 
                 <div className="account">
-                    <span>{me.displayName ?? me.username}</span>
+                    <div className="account-identity">
+                        <span className="account-name">
+                            {me.displayName ?? me.username}
+                        </span>
+                        <span className="account-user-id">
+                            ID: {me.id}
+                        </span>
+                    </div>
 
                     {isNativeIos && pushStatus !== 'registered' && (
                         <button

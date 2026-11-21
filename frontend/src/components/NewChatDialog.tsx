@@ -202,7 +202,14 @@ export function NewChatDialog({
                                     {(user.displayName ?? user.username)[0].toUpperCase()}
                                 </span>
 
-                                <strong>{user.displayName ?? user.username}</strong>
+                                <div className="new-chat-user-info">
+                                    <strong>
+                                        {user.displayName ?? user.username}
+                                    </strong>
+                                    <span className="new-chat-user-id">
+                                        ID: {user.id}
+                                    </span>
+                                </div>
 
                                 <div className="new-chat-user-actions">
                                     <button

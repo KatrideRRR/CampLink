@@ -1987,3 +1987,60 @@ body {
         transition: none;
     }
 }
+
+
+/* CampLink permanent user identifiers */
+
+.account-identity {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.account-name {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.account-user-id {
+    font-size: 11px;
+    color: #9299a5;
+    font-variant-numeric: tabular-nums;
+    user-select: text;
+}
+
+.new-chat-user-info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.new-chat-user-info strong {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.new-chat-user-id {
+    color: #a7afb9;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    user-select: text;
+}
+
+:root[data-theme='light'] .account-user-id,
+:root[data-theme='light'] .new-chat-user-id {
+    color: #66707e;
+}
