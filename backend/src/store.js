@@ -27,6 +27,7 @@ function publicUser(row) {
     return {
         id: row.id,
         username: row.username,
+        displayName: row.display_name ?? row.username,
         createdAt: row.created_at,
     };
 }
@@ -213,6 +214,16 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             idx_users_phone_unique ON users(phone);
     `);
 
+    if (!userColumns.some(c => c.name === 'display_name')) {
+        db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
+    }
+
+    if (!userColumns.some(c => c.name === 'display_name_search')) {
+        db.exec(
+            'ALTER TABLE users ADD COLUMN display_name_search TEXT'
+        );
+    }
+
     const selectMessage = db.prepare(`
         SELECT
             id,
@@ -308,6 +319,10 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                 throw new Error('Invalid registration');
             }
 
+            // Technical login remains compatible with older accounts.
+            const username = data.username ??
+                'cl_' + randomBytes(8).toString('hex');
+
             const salt = randomBytes(16).toString('hex');
             const passwordHash = scryptSync(
                 data.password, salt, 64
@@ -317,11 +332,19 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
 
             const result = db.prepare(`
                 INSERT INTO users (
-                    username, email, phone,
-                    password_salt, password_hash, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    username,
+                    display_name,
+                    display_name_search,
+                    email,
+                    phone,
+                    password_salt,
+                    password_hash,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
-                data.username,
+                username,
+                data.displayName,
+                data.displayName.toLocaleLowerCase('ru'),
                 data.email,
                 data.phone,
                 salt,
@@ -342,7 +365,10 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                 return [];
             }
 
-            const text = query.trim().toLowerCase();
+            const text = query.trim()
+                .replace(/\s+/g, ' ')
+                .toLocaleLowerCase('ru');
+
             const name = text.replace(/^@/, '');
             const digits = text.replace(/\D/g, '');
             const clauses = [];
@@ -351,6 +377,17 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             if (/^[a-z0-9_]{3,24}$/.test(name)) {
                 clauses.push('instr(username, ?) = 1');
                 values.push(name);
+            }
+
+            if (
+                text.length >= 3 &&
+                text.length <= 60 &&
+                /^[\p{L}\p{M}\p{N} .'-]+$/u.test(text)
+            ) {
+                clauses.push(
+                    'instr(display_name_search, ?) > 0'
+                );
+                values.push(text);
             }
 
             if (
@@ -376,7 +413,10 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             if (!clauses.length) return [];
 
             return db.prepare(`
-                SELECT id, username
+                SELECT
+                    id,
+                    username,
+                    COALESCE(display_name, username) AS displayName
                 FROM users
                 WHERE id != ?
                   AND (${clauses.join(' OR ')})
@@ -602,6 +642,9 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                 SELECT
                     u.id,
                     u.username,
+                    COALESCE(
+                        u.display_name, u.username
+                    ) AS displayName,
                     (
                         SELECT MAX(m.id)
                         FROM messages m

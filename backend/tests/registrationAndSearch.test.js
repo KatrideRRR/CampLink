@@ -145,7 +145,7 @@ test('open registration and private user suggestions', {
 
         assert.deepEqual(
             Object.keys(matches[0]).sort(),
-            ['id', 'username']
+            ['displayName', 'id', 'username']
         );
     }
 

@@ -1,16 +1,26 @@
+import {
+    parsePhoneNumberFromString,
+} from 'libphonenumber-js/max';
+
 export function normalizePhone(value) {
     if (typeof value !== 'string') return null;
 
     let phone = value.trim().replace(/[\s()-]/g, '');
 
+    // Existing Russian 8-prefixed numbers.
     if (/^8\d{10}$/.test(phone)) {
         phone = '+7' + phone.slice(1);
     } else if (/^7\d{10}$/.test(phone)) {
         phone = '+' + phone;
     }
 
-    return /^\+[1-9]\d{7,14}$/.test(phone)
-        ? phone
+    const parsed = parsePhoneNumberFromString(
+        phone,
+        { defaultCountry: 'RU', extract: false }
+    );
+
+    return parsed?.isValid()
+        ? parsed.number
         : null;
 }
 
@@ -19,6 +29,22 @@ export function validateRegistration(input) {
         typeof input?.username === 'string'
             ? input.username.trim().toLowerCase()
             : '';
+
+    const hasDisplayName =
+        typeof input?.displayName === 'string';
+
+    const displayName = hasDisplayName
+        ? input.displayName.trim().replace(/\s+/g, ' ')
+        : username;
+
+    const validUsername =
+        /^[a-z0-9_]{3,24}$/.test(username);
+
+    const validDisplayName =
+        displayName.length >= 2 &&
+        displayName.length <= 60 &&
+        /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} .'-]*$/u
+            .test(displayName);
 
     const email =
         typeof input?.email === 'string'
@@ -29,7 +55,9 @@ export function validateRegistration(input) {
     const password = input?.password;
 
     if (
-        !/^[a-z0-9_]{3,24}$/.test(username) ||
+        !validDisplayName ||
+        (!hasDisplayName && !validUsername) ||
+        (username && !validUsername) ||
         email.length > 254 ||
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
         !phone ||
@@ -40,5 +68,11 @@ export function validateRegistration(input) {
         return null;
     }
 
-    return { username, email, phone, password };
+    return {
+        username: username || null,
+        displayName,
+        email,
+        phone,
+        password,
+    };
 }

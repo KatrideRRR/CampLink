@@ -1,6 +1,7 @@
 export type ChatPeer = {
     id: number;
     username: string;
+    displayName?: string;
     lastMessageId: number | null;
 };
 

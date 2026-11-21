@@ -8,6 +8,7 @@ import { apiFetch } from '../services/native-auth';
 export type FoundUser = {
     id: number;
     username: string;
+    displayName?: string;
 };
 
 type Props = {
@@ -198,10 +199,10 @@ export function NewChatDialog({
                                 key={user.id}
                             >
                                 <span className="avatar">
-                                    {user.username[0].toUpperCase()}
+                                    {(user.displayName ?? user.username)[0].toUpperCase()}
                                 </span>
 
-                                <strong>@{user.username}</strong>
+                                <strong>{user.displayName ?? user.username}</strong>
 
                                 <div className="new-chat-user-actions">
                                     <button

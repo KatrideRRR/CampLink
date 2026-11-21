@@ -175,7 +175,7 @@ export function createAppServer(options = {}) {
                     senderUsername:
                         store.getUserById(
                             message.senderId
-                        )?.username ?? null,
+                        )?.displayName ?? null,
                 }))
                 .then((invalidTokens) => {
                     if (!Array.isArray(invalidTokens)) return;

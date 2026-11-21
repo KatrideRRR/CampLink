@@ -104,6 +104,7 @@ import './App.css';
 type User = {
     id: number;
     username: string;
+    displayName?: string;
 };
 
 type ChatMessage = {
@@ -1353,7 +1354,7 @@ function App() {
 
                 setToast({
                     peerId: message.senderId,
-                    name: sender?.username ?? 'Новое сообщение',
+                    name: sender?.displayName ?? sender?.username ?? 'Новое сообщение',
                     text: message.text,
                 });
             }
@@ -1462,6 +1463,7 @@ function App() {
             }
 
             clearRelayCredential(me.id);
+            setRegisterMode(false);
             setMe(null);
             setPeers([]);
             setMessages([]);
@@ -1972,8 +1974,9 @@ function App() {
             }
         }
 
-        setUsername(result.user.username);
+        setUsername('');
         setPassword('');
+        setRegisterMode(false);
         saveOfflineUser(result.user);
         setOfflinePreview(false);
         setMe(result.user);
@@ -2011,6 +2014,7 @@ function App() {
                 }
             }
 
+            setRegisterMode(false);
             setPassword('');
             saveOfflineUser(result.user);
             setOfflinePreview(false);
@@ -2045,6 +2049,9 @@ function App() {
         readPendingRef.current = null;
         socketRef.current?.disconnect();
         selectedPeerRef.current = null;
+        setRegisterMode(false);
+        setUsername('');
+        setPassword('');
         setMe(null);
         setPeers([]);
         setSelectedPeerId(null);
@@ -2565,7 +2572,7 @@ function App() {
                 </div>
 
                 <div className="account">
-                    <span>@{me.username}</span>
+                    <span>{me.displayName ?? me.username}</span>
 
                     {isNativeIos && pushStatus !== 'registered' && (
                         <button
@@ -2627,11 +2634,11 @@ function App() {
                             onClick={() => selectPeer(peer.id)}
                         >
               <span className="avatar">
-                {peer.username[0].toUpperCase()}
+                {(peer.displayName ?? peer.username)[0].toUpperCase()}
               </span>
                             <span className="contact-info">
                 <span className="contact-name-row">
-                    <strong>{peer.username}</strong>
+                    <strong>{peer.displayName ?? peer.username}</strong>
                     {onlineIds.includes(peer.id) && (
                         <span
                             className="presence-dot"
@@ -2703,12 +2710,12 @@ function App() {
                                 ‹ <span>Чаты</span>
                             </button>
                             <div className="avatar">
-                                {selectedPeer.username[0].toUpperCase()}
+                                {(selectedPeer.displayName ?? selectedPeer.username)[0].toUpperCase()}
                             </div>
 
                             <div>
                                 <span className="contact-name-row">
-                                    <strong>{selectedPeer.username}</strong>
+                                    <strong>{selectedPeer.displayName ?? selectedPeer.username}</strong>
                                     {onlineIds.includes(selectedPeer.id) && (
                                         <span
                                             className="presence-dot"
@@ -2815,7 +2822,7 @@ function App() {
                                                 <strong>
                                                     {message.replyToSenderId === me.id
                                                         ? 'Вы'
-                                                        : selectedPeer.username}
+                                                        : (selectedPeer.displayName ?? selectedPeer.username)}
                                                 </strong>
                                                 <span>
                                                     {message.replyToText ??

@@ -4,11 +4,22 @@ export function buildMessagePushPayload(
     message,
     senderUsername
 ) {
+    const value =
+        typeof senderUsername === 'string'
+            ? senderUsername.trim()
+            : '';
+
     const name =
-        typeof senderUsername === 'string' &&
-        /^[a-z0-9_]{3,24}$/.test(senderUsername)
-            ? `@${senderUsername}`
-            : 'Пользователь';
+        /^[a-z0-9_]{3,24}$/.test(value)
+            ? `@${value}`
+            : (
+                value.length >= 2 &&
+                value.length <= 60 &&
+                /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} .'-]*$/u
+                    .test(value)
+            )
+                ? value
+                : 'Пользователь';
 
     const text =
         typeof message?.text === 'string'

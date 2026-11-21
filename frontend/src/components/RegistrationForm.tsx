@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react';
+import PhoneInput, {
+    isValidPhoneNumber,
+    type Value,
+} from 'react-phone-number-input';
+import ru from 'react-phone-number-input/locale/ru';
+import flags from 'react-phone-number-input/flags';
+import 'react-phone-number-input/style.css';
 
 export type RegistrationPayload = {
-    username: string;
+    displayName: string;
     email: string;
     phone: string;
     password: string;
@@ -20,9 +27,9 @@ export function RegistrationForm({
     onBack,
     onSubmit,
 }: Props) {
-    const [username, setUsername] = useState('');
+    const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('');
+    const [phone, setPhone] = useState<Value>();
     const [password, setPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');
     const [busy, setBusy] = useState(false);
@@ -32,11 +39,24 @@ export function RegistrationForm({
         event.preventDefault();
         setLocalError('');
 
-        if (!/^[a-z0-9_]{3,24}$/.test(
-            username.trim().toLowerCase()
-        )) {
+        const name = displayName.trim()
+            .replace(/\s+/g, ' ');
+
+        if (
+            name.length < 2 ||
+            name.length > 60 ||
+            !/^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} .'-]*$/u
+                .test(name)
+        ) {
             setLocalError(
-                'Никнейм: 3–24 символа, латиница, цифры или _'
+                'Введите имя или никнейм от 2 до 60 символов'
+            );
+            return;
+        }
+
+        if (!phone || !isValidPhoneNumber(phone)) {
+            setLocalError(
+                'Проверьте номер телефона и код страны'
             );
             return;
         }
@@ -57,13 +77,13 @@ export function RegistrationForm({
 
         try {
             await onSubmit({
-                username: username.trim().toLowerCase(),
+                displayName: name,
                 email: email.trim().toLowerCase(),
-                phone: phone.trim(),
+                phone,
                 password,
             });
         } catch {
-            // The parent shows a server-specific error.
+            // Error is displayed by the parent.
         } finally {
             setBusy(false);
         }
@@ -80,20 +100,29 @@ export function RegistrationForm({
                 onSubmit={event => void submit(event)}
             >
                 <input
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    placeholder="Никнейм"
-                    autoComplete="username"
-                    minLength={3}
-                    maxLength={24}
+                    type="text"
+                    value={displayName}
+                    onChange={event =>
+                        setDisplayName(event.target.value)
+                    }
+                    placeholder="Имя или никнейм"
+                    aria-label="Имя или никнейм"
+                    autoComplete="name"
+                    maxLength={60}
                     required
                 />
 
-                <input
-                    type="tel"
+                <PhoneInput
+                    className="registration-phone"
+                    defaultCountry="RU"
+                    international
+                    countryCallingCodeEditable={false}
+                    labels={ru}
+                    flags={flags}
                     value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="Телефон: +7 900 000-00-00"
+                    onChange={setPhone}
+                    placeholder="Номер телефона"
+                    aria-label="Номер телефона"
                     autoComplete="tel"
                     required
                 />
@@ -101,7 +130,9 @@ export function RegistrationForm({
                 <input
                     type="email"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={event =>
+                        setEmail(event.target.value)
+                    }
                     placeholder="Электронная почта"
                     autoComplete="email"
                     required
@@ -110,17 +141,22 @@ export function RegistrationForm({
                 <input
                     type="password"
                     value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Пароль (минимум 12 символов)"
+                    onChange={event =>
+                        setPassword(event.target.value)
+                    }
+                    placeholder="Пароль (от 12 символов)"
                     autoComplete="new-password"
                     minLength={12}
+                    maxLength={128}
                     required
                 />
 
                 <input
                     type="password"
                     value={confirmation}
-                    onChange={e => setConfirmation(e.target.value)}
+                    onChange={event =>
+                        setConfirmation(event.target.value)
+                    }
                     placeholder="Повторите пароль"
                     autoComplete="new-password"
                     required

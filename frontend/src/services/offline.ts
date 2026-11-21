@@ -3,6 +3,7 @@ import type { MessageMedia } from './media-types';
 export type OfflineUser = {
     id: number;
     username: string;
+    displayName?: string;
 };
 
 export type OfflineMessage = {

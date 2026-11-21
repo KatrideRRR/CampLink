@@ -1822,3 +1822,75 @@ body {
         margin-left: auto;
     }
 }
+
+/* International registration phone input */
+
+.login-card .registration-form .registration-phone {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 49px;
+    padding: 0 13px;
+    border: 1px solid #393c44;
+    border-radius: 12px;
+    background: #26282e;
+    color: #fff;
+}
+
+.login-card .registration-form
+.registration-phone .PhoneInputCountry {
+    flex-shrink: 0;
+    margin-right: 0;
+}
+
+.login-card .registration-form
+.registration-phone .PhoneInputCountrySelect {
+    cursor: pointer;
+}
+
+.login-card .registration-form
+.registration-phone .PhoneInputCountryIcon {
+    width: 26px;
+    height: 18px;
+}
+
+.login-card .registration-form
+.registration-phone .PhoneInputInput {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    padding: 13px 0;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 16px;
+}
+
+.login-card .registration-form
+.registration-phone:focus-within {
+    border-color: #e8ff72;
+}
+
+:root[data-theme='light']
+.login-card .registration-form .registration-phone {
+    background: #f4f6f9;
+    border-color: #cdd4dc;
+    color: #181b20;
+}
+
+:root[data-theme='light']
+.login-card .registration-form
+.registration-phone .PhoneInputInput {
+    background: transparent;
+    color: #181b20;
+}
+
+:root[data-theme='light']
+.login-card .registration-form
+.registration-phone:focus-within {
+    border-color: #788d28;
+}
