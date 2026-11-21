@@ -364,6 +364,44 @@ function App() {
     const [mediaMenuOpen, setMediaMenuOpen] =
         useState(false);
 
+    const mediaMenuRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!mediaMenuOpen) return;
+
+        const closeOutside = (event: PointerEvent) => {
+            if (
+                !mediaMenuRef.current?.contains(
+                    event.target as Node
+                )
+            ) {
+                setMediaMenuOpen(false);
+            }
+        };
+
+        const closeEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setMediaMenuOpen(false);
+            }
+        };
+
+        document.addEventListener(
+            'pointerdown', closeOutside
+        );
+        document.addEventListener(
+            'keydown', closeEscape
+        );
+
+        return () => {
+            document.removeEventListener(
+                'pointerdown', closeOutside
+            );
+            document.removeEventListener(
+                'keydown', closeEscape
+            );
+        };
+    }, [mediaMenuOpen]);
+
     const [pendingMedia, setPendingMedia] =
         useState<{
             blob: Blob;
@@ -1584,6 +1622,7 @@ function App() {
     }
 
     function returnToChats() {
+        setMediaMenuOpen(false);
         cancelMessageTouch();
         setReactionMenuMessageId(null);
         setReplyTo(null);
@@ -1747,6 +1786,7 @@ function App() {
     ]);
 
     function selectPeer(id: number) {
+        setMediaMenuOpen(false);
         setMobileChatOpen(true);
 
         if (selectedPeerRef.current === id) {
@@ -2761,7 +2801,7 @@ function App() {
                                 }}
                             />
 
-                            <div className="composer-attach">
+                            <div className="composer-attach" ref={mediaMenuRef}>
                                 <button
                                     type="button"
                                     className="composer-plus"
@@ -2806,7 +2846,21 @@ function App() {
                                                 cameraInputRef.current?.click();
                                             }}
                                         >
-                                            📷 Камера
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                width="20"
+                                                height="20"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="1.8"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+                                                <circle cx="12" cy="13" r="3.5" />
+                                            </svg>
+                                            <span>Камера</span>
                                         </button>
 
                                         <button
@@ -2816,7 +2870,22 @@ function App() {
                                                 galleryInputRef.current?.click();
                                             }}
                                         >
-                                            🖼 Галерея
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                width="20"
+                                                height="20"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="1.8"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <rect x="3" y="3" width="18" height="18" rx="3" />
+                                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                                <path d="m3 17 5-5 4 4 3-3 6 5" />
+                                            </svg>
+                                            <span>Галерея</span>
                                         </button>
                                     </div>
                                 )}
