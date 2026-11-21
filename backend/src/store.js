@@ -82,6 +82,16 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS user_contacts (
+      owner_id INTEGER NOT NULL,
+      peer_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (owner_id, peer_id),
+      CHECK (owner_id <> peer_id),
+      FOREIGN KEY (owner_id) REFERENCES users(id),
+      FOREIGN KEY (peer_id) REFERENCES users(id)
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sender_id INTEGER NOT NULL,
@@ -428,6 +438,91 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                   )
                 GROUP BY m.sender_id
             `).all(userId);
+        },
+
+        findUserByUsername(username) {
+            if (
+                typeof username !== 'string' ||
+                !/^[a-z0-9_]{3,24}$/.test(username)
+            ) {
+                return null;
+            }
+
+            return publicUser(
+                db.prepare(
+                    'SELECT * FROM users WHERE username = ?'
+                ).get(username)
+            );
+        },
+
+        addContact(ownerId, peerId) {
+            if (
+                !Number.isSafeInteger(ownerId) ||
+                !Number.isSafeInteger(peerId) ||
+                ownerId <= 0 ||
+                peerId <= 0 ||
+                ownerId === peerId ||
+                !this.getUserById(peerId)
+            ) {
+                return false;
+            }
+
+            db.prepare(`
+                INSERT OR IGNORE INTO user_contacts (
+                    owner_id, peer_id, created_at
+                )
+                VALUES (?, ?, ?)
+            `).run(
+                ownerId,
+                peerId,
+                new Date().toISOString()
+            );
+
+            return true;
+        },
+
+        listChats(userId) {
+            return db.prepare(`
+                SELECT
+                    u.id,
+                    u.username,
+                    (
+                        SELECT MAX(m.id)
+                        FROM messages m
+                        WHERE
+                            (m.sender_id = ?
+                             AND m.recipient_id = u.id)
+                            OR
+                            (m.recipient_id = ?
+                             AND m.sender_id = u.id)
+                    ) AS lastMessageId
+                FROM users u
+                WHERE u.id != ?
+                  AND (
+                      EXISTS (
+                          SELECT 1
+                          FROM user_contacts c
+                          WHERE c.owner_id = ?
+                            AND c.peer_id = u.id
+                      )
+                      OR EXISTS (
+                          SELECT 1
+                          FROM messages m
+                          WHERE
+                              (m.sender_id = ?
+                               AND m.recipient_id = u.id)
+                              OR
+                              (m.recipient_id = ?
+                               AND m.sender_id = u.id)
+                      )
+                  )
+                ORDER BY
+                    lastMessageId DESC,
+                    u.username COLLATE NOCASE ASC
+            `).all(
+                userId, userId, userId,
+                userId, userId, userId
+            );
         },
 
         listUsers(excludeId) {

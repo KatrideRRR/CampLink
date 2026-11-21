@@ -27,7 +27,6 @@ import { observeIosLifecycle } from './services/ios-native';
 import {
     clearOfflineCache,
     decideSession,
-    readOfflineContacts,
     readOfflineMessages,
     readOfflineUser,
     saveOfflineContacts,
@@ -86,6 +85,12 @@ import {
     clearUnreadCounts,
 } from './services/unread-chats';
 import { MediaBubble } from './components/MediaBubble';
+import {
+    readChatList,
+    saveChatList,
+    sortChatList,
+    type ChatPeer,
+} from './services/chat-list';
 import './App.css';
 
 type User = {
@@ -280,7 +285,16 @@ function App() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
-    const [peers, setPeers] = useState<User[]>([]);
+    const [peers, setPeers] = useState<ChatPeer[]>([]);
+
+    const [contactSearchOpen, setContactSearchOpen] =
+        useState(false);
+    const [contactSearch, setContactSearch] =
+        useState('');
+    const [contactSearchBusy, setContactSearchBusy] =
+        useState(false);
+    const [contactSearchError, setContactSearchError] =
+        useState('');
 
     const [unreadCounts, setUnreadCounts] =
         useState<Record<number, number>>({});
@@ -903,7 +917,7 @@ function App() {
         let active = true;
 
 
-        const cachedContacts = readOfflineContacts(me.id);
+        const cachedContacts = readChatList(me.id);
 
         setPeers(cachedContacts);
 
@@ -915,24 +929,38 @@ function App() {
             setSelectedPeerId(cachedContacts[0].id);
         }
 
-        apiGet<{ users: User[] }>('/api/users')
-            .then(({ users }) => {
-                if (!active) return;
+        function refreshContacts() {
+            void apiGet<{ users: ChatPeer[] }>('/api/users')
+                .then(({ users }) => {
+                    if (!active) return;
 
-                saveOfflineContacts(me.id, users);
+                    const ordered = sortChatList(users);
 
-                setPeers(users);
+                    saveChatList(me.id, ordered);
+                    saveOfflineContacts(me.id, ordered);
+                    setPeers(ordered);
 
-                if (users.length > 0 && selectedPeerRef.current === null) {
-                    selectedPeerRef.current = users[0].id;
-                    setSelectedPeerId(users[0].id);
-                }
-            })
-            .catch(() => {
-                if (active && cachedContacts.length === 0) {
-                    setError('Не удалось загрузить контакты');
-                }
-            });
+                    if (
+                        ordered.length > 0 &&
+                        selectedPeerRef.current === null
+                    ) {
+                        selectedPeerRef.current = ordered[0].id;
+                        setSelectedPeerId(ordered[0].id);
+                    }
+                })
+                .catch(() => {
+                    if (
+                        active &&
+                        cachedContacts.length === 0
+                    ) {
+                        setError(
+                            'Не удалось загрузить список чатов'
+                        );
+                    }
+                });
+        }
+
+        refreshContacts();
 
         const socket = connectToServer(setConnected);
         socketRef.current = socket;
@@ -1289,7 +1317,21 @@ function App() {
 
             snapshotChatNow(me.id);
 
-            setPeers(current => [...current]);
+            setPeers(current => sortChatList(
+                current.map(peer =>
+                    peer.id === partnerId
+                        ? {
+                            ...peer,
+                            lastMessageId: Math.max(
+                                peer.lastMessageId ?? 0,
+                                message.id
+                            ),
+                        }
+                        : peer
+                )
+            ));
+
+            refreshContacts();
 
             if (
                 message.senderId !== me.id &&
@@ -1360,6 +1402,7 @@ function App() {
         });
 
         socket.on('connect', () => {
+            refreshContacts();
             relayedInSession.clear();
             rejectedInSession.clear();
             setRejectedMessageIds([]);
@@ -1833,6 +1876,67 @@ function App() {
 
         setDraft('');
         setError('');
+    }
+
+    async function handleFindContact(
+        event: FormEvent
+    ) {
+        event.preventDefault();
+
+        if (!me || contactSearchBusy) return;
+
+        const query =
+            contactSearch.trim().toLowerCase().replace(/^@/, '');
+
+        if (!/^[a-z0-9_]{3,24}$/.test(query)) {
+            setContactSearchError(
+                'Введите логин от 3 до 24 символов'
+            );
+            return;
+        }
+
+        setContactSearchBusy(true);
+        setContactSearchError('');
+
+        try {
+            const result = await apiGet<{
+                user: User | null;
+            }>(
+                '/api/users/search?username=' +
+                encodeURIComponent(query)
+            );
+
+            if (!result.user) {
+                setContactSearchError(
+                    'Пользователь не найден'
+                );
+                return;
+            }
+
+            await apiPost('/api/contacts', {
+                peerId: result.user.id,
+            });
+
+            const response = await apiGet<{
+                users: ChatPeer[];
+            }>('/api/users');
+
+            const ordered = sortChatList(response.users);
+
+            saveChatList(me.id, ordered);
+            saveOfflineContacts(me.id, ordered);
+            setPeers(ordered);
+
+            setContactSearch('');
+            setContactSearchOpen(false);
+            selectPeer(result.user.id);
+        } catch {
+            setContactSearchError(
+                'Не удалось добавить контакт. Проверьте связь.'
+            );
+        } finally {
+            setContactSearchBusy(false);
+        }
     }
 
     async function handleLogin(event: FormEvent) {
@@ -2425,10 +2529,57 @@ function App() {
                     </button>
                 </div>
 
-                <div className="section-heading">Сообщения</div>
+                <div className="section-heading-row">
+                    <div className="section-heading">
+                        Сообщения
+                    </div>
+                    <button
+                        type="button"
+                        className="new-chat-button"
+                        onClick={() => {
+                            setContactSearchOpen(value => !value);
+                            setContactSearchError('');
+                        }}
+                        aria-expanded={contactSearchOpen}
+                    >
+                        + Новый чат
+                    </button>
+                </div>
+
+                {contactSearchOpen && (
+                    <form
+                        className="contact-search-form"
+                        onSubmit={handleFindContact}
+                    >
+                        <input
+                            type="text"
+                            value={contactSearch}
+                            onChange={event =>
+                                setContactSearch(event.target.value)
+                            }
+                            placeholder="Логин пользователя"
+                            aria-label="Логин пользователя"
+                            autoComplete="off"
+                            maxLength={25}
+                            required
+                        />
+                        <button
+                            type="submit"
+                            disabled={contactSearchBusy}
+                        >
+                            Добавить
+                        </button>
+
+                        {contactSearchError && (
+                            <small role="alert">
+                                {contactSearchError}
+                            </small>
+                        )}
+                    </form>
+                )}
 
                 <nav className="contact-list">
-                    {peers.map((peer) => (
+                    {sortChatList(peers).map((peer) => (
                         <button
                             key={peer.id}
                             type="button"
@@ -2480,7 +2631,7 @@ function App() {
 
                 {peers.length === 0 && (
                     <p className="empty-contacts">
-                        Пока нет других пользователей.
+                        Пока нет переписок. Нажмите «Новый чат».
                     </p>
                 )}
             </aside>

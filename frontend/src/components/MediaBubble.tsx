@@ -62,6 +62,24 @@ export function MediaBubble({ media }: Props) {
         };
     }, [media.id, retry]);
 
+    useEffect(() => {
+        if (!expanded) return;
+
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setExpanded(false);
+            }
+        };
+
+        document.addEventListener('keydown', closeOnEscape);
+
+        return () => {
+            document.removeEventListener(
+                'keydown', closeOnEscape
+            );
+        };
+    }, [expanded]);
+
     if (!url) {
         return (
             <div className="media-placeholder">
@@ -136,9 +154,25 @@ export function MediaBubble({ media }: Props) {
                 >
                     <button
                         type="button"
+                        className="media-lightbox-close"
                         aria-label="Закрыть фотографию"
+                        onClick={event => {
+                            event.stopPropagation();
+                            setExpanded(false);
+                        }}
                     >
-                        Закрыть ×
+                        <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
                     </button>
                     <img src={url} alt="Фотография" />
                 </div>

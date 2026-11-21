@@ -1514,3 +1514,104 @@ body {
     font-size: 12px;
     font-weight: 700;
 }
+
+
+/* Minimal photo viewer close button */
+
+.media-lightbox .media-lightbox-close {
+    position: absolute;
+    top: max(16px, env(safe-area-inset-top));
+    right: 16px;
+    z-index: 2;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 50%;
+    background: rgba(45,48,55,.82);
+    color: #fff;
+    cursor: pointer;
+}
+
+.media-lightbox-close svg {
+    display: block;
+}
+
+.media-lightbox-close:hover {
+    background: #50545d;
+}
+
+
+/* Personal chat list and contact search */
+
+.section-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 16px;
+}
+
+.new-chat-button {
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    color: #e8ff72;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.contact-search-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 16px 16px;
+}
+
+.contact-search-form input {
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid #4b505b;
+    border-radius: 11px;
+    outline: none;
+    background: #272b32;
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+}
+
+.contact-search-form input:focus {
+    border-color: #e8ff72;
+}
+
+.contact-search-form button {
+    border: 0;
+    border-radius: 9px;
+    padding: 9px 14px;
+    background: #e8ff72;
+    color: #191c20;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.contact-search-form small {
+    flex: 1 1 100%;
+    color: #ff9b9b;
+}
+
+:root[data-theme='light'] .new-chat-button {
+    color: #647c0f;
+}
+
+:root[data-theme='light'] .contact-search-form input {
+    background: #fff;
+    color: #181b20;
+    border-color: #cdd4dc;
+}
+
+:root[data-theme='light'] .contact-search-form small {
+    color: #ac2638;
+}

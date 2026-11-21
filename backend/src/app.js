@@ -729,8 +729,72 @@ export function createAppServer(options = {}) {
     });
 
     app.get('/api/users', requireAuth, (req, res) => {
+        res.set('Cache-Control', 'no-store');
         res.json({
-            users: store.listUsers(req.user.id),
+            users: store.listChats(req.user.id),
+        });
+    });
+
+    app.get(
+        '/api/users/search',
+        requireAuth,
+        (req, res) => {
+            const username = req.query.username;
+
+            if (
+                typeof username !== 'string' ||
+                !/^[a-z0-9_]{3,24}$/.test(username)
+            ) {
+                return res.status(400).json({
+                    error: 'Invalid username',
+                });
+            }
+
+            const user =
+                store.findUserByUsername(username);
+
+            res.set('Cache-Control', 'no-store');
+            res.json({
+                user: user?.id === req.user.id
+                    ? null
+                    : user,
+            });
+        }
+    );
+
+    app.post('/api/contacts', requireAuth, (req, res) => {
+        const origin = req.get('origin');
+
+        if (
+            origin &&
+            !allowedOrigins.includes(origin) &&
+            !nativeOrigins.has(origin)
+        ) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
+
+        const peerId = req.body?.peerId;
+
+        if (
+            !Number.isSafeInteger(peerId) ||
+            peerId <= 0 ||
+            peerId === req.user.id
+        ) {
+            return res.status(400).json({
+                error: 'Invalid contact',
+            });
+        }
+
+        if (!store.addContact(req.user.id, peerId)) {
+            return res.status(404).json({
+                error: 'User not found',
+            });
+        }
+
+        res.status(200).json({
+            user: store.getUserById(peerId),
         });
     });
 
