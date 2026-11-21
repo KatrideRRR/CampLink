@@ -1070,3 +1070,37 @@ body {
     background: #788d28;
     color: #fff;
 }
+
+/* Highlight avatar when conversation is unread */
+
+.contact .avatar {
+    box-sizing: border-box;
+    transition:
+        background-color 220ms ease,
+        color 220ms ease,
+        box-shadow 220ms ease,
+        transform 220ms ease;
+}
+
+.contact.unread .avatar {
+    background-color: #ffe15a;
+    color: #211d0b;
+    box-shadow:
+        0 0 0 3px rgba(255, 225, 90, .23),
+        0 0 20px rgba(255, 225, 90, .38);
+    transform: scale(1.04);
+}
+
+:root[data-theme='light'] .contact.unread .avatar {
+    background-color: #f8cd34;
+    color: #211d0b;
+    box-shadow:
+        0 0 0 3px rgba(248, 205, 52, .24),
+        0 0 14px rgba(173, 136, 16, .24);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .contact .avatar {
+        transition: none;
+    }
+}

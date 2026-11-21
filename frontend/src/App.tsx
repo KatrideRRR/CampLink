@@ -291,8 +291,22 @@ function App() {
     const [pendingPushPeerId, setPendingPushPeerId] =
         useState<number | null>(null);
 
+    const pendingPushReadRef = useRef<{
+        peerId: number;
+        messageId: number;
+    } | null>(null);
+
     useEffect(() => {
-        return observePushNavigation(setPendingPushPeerId);
+        return observePushNavigation(
+            (peerId, messageId) => {
+                pendingPushReadRef.current =
+                    messageId !== null
+                        ? { peerId, messageId }
+                        : null;
+
+                setPendingPushPeerId(peerId);
+            }
+        );
     }, []);
 
     const [mobileView, setMobileView] = useState(
@@ -394,6 +408,8 @@ function App() {
         if (!me || pendingPushPeerId === null) return;
 
         if (pendingPushPeerId !== me.id) {
+            // Push always opens the latest part of the chat.
+            previousScrollPeerRef.current = null;
             selectedPeerRef.current = pendingPushPeerId;
             setSelectedPeerId(pendingPushPeerId);
             setMessages(
@@ -528,10 +544,22 @@ function App() {
             0
         );
 
-        if (lastIncomingId === 0) return;
+        const pendingPush = pendingPushReadRef.current;
+
+        const pushMessageId =
+            pendingPush?.peerId === selectedPeerId
+                ? pendingPush.messageId
+                : 0;
+
+        const readThroughId = Math.max(
+            lastIncomingId,
+            pushMessageId
+        );
+
+        if (readThroughId === 0) return;
 
         const key =
-            `${me.id}:${selectedPeerId}:${lastIncomingId}`;
+            `${me.id}:${selectedPeerId}:${readThroughId}`;
 
         if (
             lastReadSentRef.current === key ||
@@ -546,7 +574,7 @@ function App() {
             'chat:read',
             {
                 peerId: selectedPeerId,
-                throughId: lastIncomingId,
+                throughId: readThroughId,
             },
             (
                 error: Error | null,
@@ -558,6 +586,16 @@ function App() {
 
                 if (!error && response?.ok) {
                     lastReadSentRef.current = key;
+
+                    const pending =
+                        pendingPushReadRef.current;
+
+                    if (
+                        pending?.peerId === selectedPeerId &&
+                        pending.messageId <= readThroughId
+                    ) {
+                        pendingPushReadRef.current = null;
+                    }
                 }
             }
         );
@@ -1571,6 +1609,45 @@ function App() {
         messages,
         pendingMessages,
         selectedPeerId,
+        mobileChatOpen,
+    ]);
+
+    useEffect(() => {
+        if (
+            !me ||
+            selectedPeerId === null ||
+            !connected ||
+            (mobileView && !mobileChatOpen)
+        ) {
+            return;
+        }
+
+        // Run after the messages have been laid out
+        // and the chat has had a chance to scroll.
+        const frame = window.requestAnimationFrame(() => {
+            const list = messageListRef.current;
+            if (!list) return;
+
+            const remaining =
+                list.scrollHeight -
+                list.clientHeight -
+                list.scrollTop;
+
+            if (remaining <= 100) {
+                nearBottomRef.current = true;
+                markVisibleMessagesRead();
+            }
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frame);
+        };
+    }, [
+        me,
+        messages,
+        selectedPeerId,
+        connected,
+        mobileView,
         mobileChatOpen,
     ]);
 

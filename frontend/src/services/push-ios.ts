@@ -1,6 +1,9 @@
 import { Capacitor } from '@capacitor/core';
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 import { apiFetch } from './native-auth';
+import {
+    parsePushChatTarget,
+} from './push-navigation';
 
 export type PushStatus =
     | 'off'
@@ -93,7 +96,10 @@ export async function registerIosPush():
 
 
 export function observePushNavigation(
-    onOpenPeer: (peerId: number) => void
+    onOpenPeer: (
+        peerId: number,
+        messageId: number | null
+    ) => void
 ): () => void {
     if (!isNativeIos) return () => {};
 
@@ -104,29 +110,15 @@ export function observePushNavigation(
         (event) => {
             if (disposed) return;
 
-            const data = event.notification.data;
+            const target = parsePushChatTarget(
+                event.notification.data
+            );
 
-            if (
-                !data ||
-                typeof data !== 'object'
-            ) {
-                return;
-            }
-
-            const value =
-                (data as Record<string, unknown>).peerId;
-
-            if (
-                typeof value !== 'string' ||
-                !/^[1-9][0-9]*$/.test(value)
-            ) {
-                return;
-            }
-
-            const peerId = Number(value);
-
-            if (Number.isSafeInteger(peerId)) {
-                onOpenPeer(peerId);
+            if (target) {
+                onOpenPeer(
+                    target.peerId,
+                    target.messageId
+                );
             }
         }
     );
