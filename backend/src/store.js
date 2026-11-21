@@ -7,6 +7,10 @@ import {
     createHash,
 } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
+import {
+    normalizePhone,
+    validateRegistration,
+} from './registration.js';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -192,6 +196,23 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
         `);
     }
 
+    const userColumns = db.pragma('table_info(users)');
+
+    if (!userColumns.some(c => c.name === 'email')) {
+        db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+    }
+
+    if (!userColumns.some(c => c.name === 'phone')) {
+        db.exec('ALTER TABLE users ADD COLUMN phone TEXT');
+    }
+
+    db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_users_email_unique ON users(email);
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_users_phone_unique ON users(phone);
+    `);
+
     const selectMessage = db.prepare(`
         SELECT
             id,
@@ -280,6 +301,90 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             return this.getUserById(Number(result.lastInsertRowid));
         },
 
+        registerUser(input) {
+            const data = validateRegistration(input);
+
+            if (!data) {
+                throw new Error('Invalid registration');
+            }
+
+            const salt = randomBytes(16).toString('hex');
+            const passwordHash = scryptSync(
+                data.password, salt, 64
+            ).toString('hex');
+
+            const createdAt = new Date().toISOString();
+
+            const result = db.prepare(`
+                INSERT INTO users (
+                    username, email, phone,
+                    password_salt, password_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            `).run(
+                data.username,
+                data.email,
+                data.phone,
+                salt,
+                passwordHash,
+                createdAt
+            );
+
+            return this.getUserById(
+                Number(result.lastInsertRowid)
+            );
+        },
+
+        suggestUsers(viewerId, query) {
+            if (
+                !Number.isSafeInteger(viewerId) ||
+                typeof query !== 'string'
+            ) {
+                return [];
+            }
+
+            const text = query.trim().toLowerCase();
+            const name = text.replace(/^@/, '');
+            const digits = text.replace(/\D/g, '');
+            const clauses = [];
+            const values = [];
+
+            if (/^[a-z0-9_]{3,24}$/.test(name)) {
+                clauses.push('instr(username, ?) = 1');
+                values.push(name);
+            }
+
+            if (
+                text.length >= 5 &&
+                text.length <= 64 &&
+                /^[a-z0-9._%+@-]+$/.test(text)
+            ) {
+                clauses.push('instr(email, ?) = 1');
+                values.push(text);
+            }
+
+            if (
+                digits.length >= 7 &&
+                digits.length <= 15 &&
+                /^[\d\s+()-]+$/.test(text)
+            ) {
+                clauses.push(
+                    "instr(replace(phone, '+', ''), ?) > 0"
+                );
+                values.push(digits);
+            }
+
+            if (!clauses.length) return [];
+
+            return db.prepare(`
+                SELECT id, username
+                FROM users
+                WHERE id != ?
+                  AND (${clauses.join(' OR ')})
+                ORDER BY username
+                LIMIT 8
+            `).all(viewerId, ...values);
+        },
+
         getUserById(id) {
             const row = db.prepare(
                 'SELECT * FROM users WHERE id = ?'
@@ -296,9 +401,20 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                 return null;
             }
 
-            const row = db.prepare(
-                'SELECT * FROM users WHERE username = ?'
-            ).get(username);
+            const identifier =
+                username.trim().toLowerCase();
+
+            const row = db.prepare(`
+                SELECT * FROM users
+                WHERE username = ?
+                   OR email = ?
+                   OR phone = ?
+                LIMIT 1
+            `).get(
+                identifier,
+                identifier,
+                normalizePhone(identifier)
+            );
 
             if (!row) return null;
 

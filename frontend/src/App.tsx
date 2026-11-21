@@ -91,6 +91,14 @@ import {
     sortChatList,
     type ChatPeer,
 } from './services/chat-list';
+import {
+    NewChatDialog,
+    type FoundUser,
+} from './components/NewChatDialog';
+import {
+    RegistrationForm,
+    type RegistrationPayload,
+} from './components/RegistrationForm';
 import './App.css';
 
 type User = {
@@ -283,18 +291,14 @@ function App() {
     }, [me]);
 
     const [username, setUsername] = useState('');
+    const [registerMode, setRegisterMode] =
+        useState(false);
     const [password, setPassword] = useState('');
 
     const [peers, setPeers] = useState<ChatPeer[]>([]);
 
     const [contactSearchOpen, setContactSearchOpen] =
         useState(false);
-    const [contactSearch, setContactSearch] =
-        useState('');
-    const [contactSearchBusy, setContactSearchBusy] =
-        useState(false);
-    const [contactSearchError, setContactSearchError] =
-        useState('');
 
     const [unreadCounts, setUnreadCounts] =
         useState<Record<number, number>>({});
@@ -1878,65 +1882,101 @@ function App() {
         setError('');
     }
 
-    async function handleFindContact(
-        event: FormEvent
-    ) {
-        event.preventDefault();
+    async function handleChooseContact(
+        user: FoundUser,
+        openChat: boolean
+    ): Promise<void> {
+        if (!me) throw new Error('Not authenticated');
 
-        if (!me || contactSearchBusy) return;
+        // "Write" also stores the contact so it is
+        // not lost when the app is restarted.
+        await apiPost('/api/contacts', {
+            peerId: user.id,
+        });
 
-        const query =
-            contactSearch.trim().toLowerCase().replace(/^@/, '');
+        const response = await apiGet<{
+            users: ChatPeer[];
+        }>('/api/users');
 
-        if (!/^[a-z0-9_]{3,24}$/.test(query)) {
-            setContactSearchError(
-                'Введите логин от 3 до 24 символов'
-            );
-            return;
+        const ordered = sortChatList(response.users);
+
+        saveChatList(me.id, ordered);
+        saveOfflineContacts(me.id, ordered);
+        setPeers(ordered);
+
+        if (openChat) {
+            selectPeer(user.id);
         }
+    }
 
-        setContactSearchBusy(true);
-        setContactSearchError('');
+    async function handleRegister(
+        values: RegistrationPayload
+    ): Promise<void> {
+        setError('');
+
+        const native = isBundledNative();
+        let response: Response;
 
         try {
-            const result = await apiGet<{
-                user: User | null;
-            }>(
-                '/api/users/search?username=' +
-                encodeURIComponent(query)
+            response = await apiFetch(
+                native
+                    ? '/api/auth/native-register'
+                    : '/api/auth/register',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(values),
+                }
             );
-
-            if (!result.user) {
-                setContactSearchError(
-                    'Пользователь не найден'
-                );
-                return;
-            }
-
-            await apiPost('/api/contacts', {
-                peerId: result.user.id,
-            });
-
-            const response = await apiGet<{
-                users: ChatPeer[];
-            }>('/api/users');
-
-            const ordered = sortChatList(response.users);
-
-            saveChatList(me.id, ordered);
-            saveOfflineContacts(me.id, ordered);
-            setPeers(ordered);
-
-            setContactSearch('');
-            setContactSearchOpen(false);
-            selectPeer(result.user.id);
         } catch {
-            setContactSearchError(
-                'Не удалось добавить контакт. Проверьте связь.'
+            setError(
+                'Нет соединения с сервером. Попробуйте ещё раз.'
             );
-        } finally {
-            setContactSearchBusy(false);
+            throw new Error('Network error');
         }
+
+        if (!response.ok) {
+            const message =
+                response.status === 409
+                    ? 'Никнейм, телефон или email уже используется'
+                    : response.status === 429
+                        ? 'Слишком много попыток. Попробуйте позже.'
+                        : response.status === 400
+                            ? 'Проверьте правильность введённых данных'
+                            : 'Не удалось создать аккаунт';
+
+            setError(message);
+            throw new Error(message);
+        }
+
+        const result = await response.json() as {
+            user: User;
+            token?: string;
+            expiresInSeconds?: number;
+        };
+
+        if (native) {
+            try {
+                await saveNativeSession(
+                    result.token ?? '',
+                    result.expiresInSeconds ?? 0
+                );
+            } catch {
+                setError(
+                    'Аккаунт создан, но сессия не сохранилась. ' +
+                    'Войдите через форму входа.'
+                );
+                throw new Error('Native session save failed');
+            }
+        }
+
+        setUsername(result.user.username);
+        setPassword('');
+        saveOfflineUser(result.user);
+        setOfflinePreview(false);
+        setMe(result.user);
     }
 
     async function handleLogin(event: FormEvent) {
@@ -2427,36 +2467,60 @@ function App() {
                     <h1>CampLink</h1>
                     <p>Связь без границ.</p>
 
-                    <form onSubmit={handleLogin}>
-                        <input
-                            value={username}
-                            onChange={(event) =>
-                                setUsername(event.target.value)
-                            }
-                            placeholder="Логин"
-                            autoComplete="username"
-                            required
+                    {registerMode ? (
+                        <RegistrationForm
+                            error={error}
+                            onSubmit={handleRegister}
+                            onBack={() => {
+                                setRegisterMode(false);
+                                setError('');
+                            }}
                         />
+                    ) : (
+                        <>
+                            <form onSubmit={handleLogin}>
+                                <input
+                                    value={username}
+                                    onChange={event =>
+                                        setUsername(event.target.value)
+                                    }
+                                    placeholder="Никнейм, email или телефон"
+                                    autoComplete="username"
+                                    required
+                                />
 
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(event) =>
-                                setPassword(event.target.value)
-                            }
-                            placeholder="Пароль"
-                            autoComplete="current-password"
-                            required
-                        />
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={event =>
+                                        setPassword(event.target.value)
+                                    }
+                                    placeholder="Пароль"
+                                    autoComplete="current-password"
+                                    required
+                                />
 
-                        <button type="submit">Войти</button>
-                    </form>
+                                <button type="submit">
+                                    Войти
+                                </button>
+                            </form>
 
-                    {error && <p className="error">{error}</p>}
+                            {error && (
+                                <p className="error">{error}</p>
+                            )}
 
-                    <p className="hint">
-                        Доступ только по приглашению.
-                    </p>
+                            <button
+                                type="button"
+                                className="registration-back"
+                                onClick={() => {
+                                    setError('');
+                                    setRegisterMode(true);
+                                }}
+                            >
+                                Создать аккаунт
+                            </button>
+                        </>
+                    )}
                 </div>
             </main>
         );
@@ -2536,47 +2600,14 @@ function App() {
                     <button
                         type="button"
                         className="new-chat-button"
-                        onClick={() => {
-                            setContactSearchOpen(value => !value);
-                            setContactSearchError('');
-                        }}
+                        onClick={() =>
+                            setContactSearchOpen(true)
+                        }
                         aria-expanded={contactSearchOpen}
                     >
                         + Новый чат
                     </button>
                 </div>
-
-                {contactSearchOpen && (
-                    <form
-                        className="contact-search-form"
-                        onSubmit={handleFindContact}
-                    >
-                        <input
-                            type="text"
-                            value={contactSearch}
-                            onChange={event =>
-                                setContactSearch(event.target.value)
-                            }
-                            placeholder="Логин пользователя"
-                            aria-label="Логин пользователя"
-                            autoComplete="off"
-                            maxLength={25}
-                            required
-                        />
-                        <button
-                            type="submit"
-                            disabled={contactSearchBusy}
-                        >
-                            Добавить
-                        </button>
-
-                        {contactSearchError && (
-                            <small role="alert">
-                                {contactSearchError}
-                            </small>
-                        )}
-                    </form>
-                )}
 
                 <nav className="contact-list">
                     {sortChatList(peers).map((peer) => (
@@ -2635,6 +2666,16 @@ function App() {
                     </p>
                 )}
             </aside>
+
+            {contactSearchOpen && (
+                <NewChatDialog
+                    existingIds={peers.map(peer => peer.id)}
+                    onClose={() =>
+                        setContactSearchOpen(false)
+                    }
+                    onChoose={handleChooseContact}
+                />
+            )}
 
             <section
                 className="chat"

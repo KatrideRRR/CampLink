@@ -5,6 +5,9 @@ import {
 } from 'node:crypto';
 import express from 'express';
 import {
+    validateRegistration,
+} from './registration.js';
+import {
     mkdirSync,
     writeFileSync,
     unlinkSync,
@@ -87,6 +90,7 @@ export function createAppServer(options = {}) {
     const app = express();
 
     app.disable('x-powered-by');
+    app.set('trust proxy', 'loopback');
     app.use(express.json({ limit: '8kb' }));
 
     const httpServer = createServer(app);
@@ -233,6 +237,8 @@ export function createAppServer(options = {}) {
     }
 
     const loginAttempts = new Map();
+    const registrationAttempts = new Map();
+    const searchAttempts = new Map();
 
     function requireAuth(req, res, next) {
         const authorization = req.get('authorization');
@@ -365,6 +371,115 @@ export function createAppServer(options = {}) {
                 error: 'Message could not be accepted',
             });
         }
+    });
+
+    app.post([
+        '/api/auth/register',
+        '/api/auth/native-register',
+    ], (req, res) => {
+        const native =
+            req.path === '/api/auth/native-register';
+        const origin = req.get('origin');
+
+        if (
+            native &&
+            origin &&
+            !nativeOrigins.has(origin)
+        ) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
+
+        if (!native && origin) {
+            const sameHost = (() => {
+                try {
+                    return new URL(origin).host ===
+                        req.get('host');
+                } catch {
+                    return false;
+                }
+            })();
+
+            if (
+                !sameHost &&
+                !allowedOrigins.includes(origin)
+            ) {
+                return res.status(403).json({
+                    error: 'Forbidden origin',
+                });
+            }
+        }
+
+        const data = validateRegistration(req.body);
+
+        if (!data) {
+            return res.status(400).json({
+                error: 'Invalid registration data',
+            });
+        }
+
+        const key = req.ip ?? 'unknown';
+        const now = Date.now();
+        let attempt = registrationAttempts.get(key);
+
+        if (!attempt || now - attempt.started > 3600000) {
+            attempt = { started: now, count: 0 };
+        }
+
+        if (attempt.count >= 5) {
+            return res.status(429).json({
+                error: 'Too many registrations',
+            });
+        }
+
+        attempt.count++;
+        registrationAttempts.set(key, attempt);
+
+        let user;
+
+        try {
+            user = store.registerUser(data);
+        } catch (error) {
+            if (
+                String(error?.code ?? '').startsWith(
+                    'SQLITE_CONSTRAINT'
+                )
+            ) {
+                return res.status(409).json({
+                    error: 'Registration conflict',
+                });
+            }
+
+            console.error(
+                '[Registration] Failed:',
+                error?.message
+            );
+
+            return res.status(500).json({
+                error: 'Registration unavailable',
+            });
+        }
+
+        const token = store.createSession(user.id);
+
+        res.set('Cache-Control', 'no-store');
+
+        if (native) {
+            return res.status(201).json({
+                user,
+                token,
+                expiresInSeconds:
+                    Math.floor(SESSION_AGE / 1000),
+            });
+        }
+
+        res.cookie(COOKIE_NAME, token, {
+            ...cookieOptions,
+            maxAge: SESSION_AGE,
+        });
+
+        return res.status(201).json({ user });
     });
 
     app.post([
@@ -734,6 +849,49 @@ export function createAppServer(options = {}) {
             users: store.listChats(req.user.id),
         });
     });
+
+    app.get(
+        '/api/users/suggest',
+        requireAuth,
+        (req, res) => {
+            const q = req.query.q;
+
+            if (
+                typeof q !== 'string' ||
+                q.length < 3 ||
+                q.length > 64
+            ) {
+                return res.status(400).json({
+                    error: 'Invalid search',
+                });
+            }
+
+            const key = req.user.id;
+            const now = Date.now();
+            let attempt = searchAttempts.get(key);
+
+            if (!attempt || now - attempt.started > 60000) {
+                attempt = { started: now, count: 0 };
+            }
+
+            if (attempt.count >= 40) {
+                return res.status(429).json({
+                    error: 'Search rate limit',
+                });
+            }
+
+            attempt.count++;
+            searchAttempts.set(key, attempt);
+
+            res.set('Cache-Control', 'no-store');
+
+            return res.json({
+                users: store.suggestUsers(
+                    req.user.id, q
+                ),
+            });
+        }
+    );
 
     app.get(
         '/api/users/search',
