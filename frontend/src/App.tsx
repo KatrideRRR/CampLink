@@ -358,6 +358,28 @@ function App() {
     const [recordingVoice, setRecordingVoice] =
         useState(false);
 
+    useEffect(() => {
+        if (!recordingVoice) return;
+
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                stopVoiceRecording(true);
+            }
+        };
+
+        document.addEventListener(
+            'visibilitychange',
+            onVisibilityChange
+        );
+
+        return () => {
+            document.removeEventListener(
+                'visibilitychange',
+                onVisibilityChange
+            );
+        };
+    }, [recordingVoice]);
+
     const [uploadingMedia, setUploadingMedia] =
         useState(false);
 
@@ -1623,6 +1645,7 @@ function App() {
 
     function returnToChats() {
         setMediaMenuOpen(false);
+        if (recordingVoice) stopVoiceRecording(true);
         cancelMessageTouch();
         setReactionMenuMessageId(null);
         setReplyTo(null);
@@ -1787,6 +1810,12 @@ function App() {
 
     function selectPeer(id: number) {
         setMediaMenuOpen(false);
+        if (
+            recordingVoice &&
+            selectedPeerRef.current !== id
+        ) {
+            stopVoiceRecording(true);
+        }
         setMobileChatOpen(true);
 
         if (selectedPeerRef.current === id) {
@@ -2035,6 +2064,14 @@ function App() {
     async function choosePhoto(file?: File) {
         if (!file || selectedPeerId === null) return;
 
+        if (pendingMedia || uploadingMedia) {
+            setError(
+                'Сначала отправьте или удалите ' +
+                'предыдущее вложение.'
+            );
+            return;
+        }
+
         try {
             const blob = await preparePhoto(file);
 
@@ -2078,6 +2115,19 @@ function App() {
     async function toggleVoiceRecording() {
         if (recordingVoice) {
             stopVoiceRecording();
+            return;
+        }
+
+        if (voiceRecorderRef.current) {
+            setError('Предыдущая запись ещё завершается.');
+            return;
+        }
+
+        if (pendingMedia) {
+            setError(
+                'Сначала отправьте или удалите ' +
+                'предыдущее вложение.'
+            );
             return;
         }
 
@@ -2585,7 +2635,6 @@ function App() {
                                         {confirmedMessage?.media ? (
                                             <MediaBubble
                                                 media={confirmedMessage.media}
-                                                connected={connected}
                                             />
                                         ) : (
                                             <div className="message-text">

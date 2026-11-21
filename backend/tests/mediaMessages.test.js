@@ -196,4 +196,102 @@ test('media upload, access control and idempotency', {
     );
 
     assert.equal(readdirSync(directory).length, 1);
+
+    // Incorrect MIME type cannot be uploaded.
+    const invalidType = await fetch(base + path, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${senderToken}`,
+            'Content-Type': 'application/octet-stream',
+        },
+        body: png,
+    });
+
+    assert.equal(invalidType.status, 400);
+
+    // Invalid reply target must not leave orphan files.
+    const badReplyPath = '/api/media/send?' +
+        new URLSearchParams({
+            toUserId: String(recipient.id),
+            clientMessageId: randomUUID(),
+            kind: 'image',
+            replyToMessageId: '99999999',
+        });
+
+    const badReply = await fetch(base + badReplyPath, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${senderToken}`,
+            'Content-Type': 'image/png',
+        },
+        body: png,
+    });
+
+    assert.equal(badReply.status, 400);
+    assert.equal(readdirSync(directory).length, 1);
+
+    // Voice messages use the same access-control model.
+    const webm = Buffer.concat([
+        Buffer.from('1a45dfa3', 'hex'),
+        Buffer.alloc(32),
+    ]);
+
+    const voicePath = '/api/media/send?' +
+        new URLSearchParams({
+            toUserId: String(recipient.id),
+            clientMessageId: randomUUID(),
+            kind: 'voice',
+        });
+
+    const voiceResponse = await fetch(
+        base + voicePath,
+        {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${senderToken}`,
+                'Content-Type': 'audio/webm',
+            },
+            body: webm,
+        }
+    );
+
+    assert.equal(voiceResponse.status, 201);
+
+    const voiceResult = await voiceResponse.json();
+
+    assert.equal(
+        voiceResult.message.media.kind,
+        'voice'
+    );
+
+    const voiceUrl =
+        `${base}/api/media/${voiceResult.message.media.id}`;
+
+    const voiceGet = await fetch(voiceUrl, {
+        headers: {
+            Authorization: `Bearer ${recipientToken}`,
+        },
+    });
+
+    assert.equal(voiceGet.status, 200);
+    assert.deepEqual(
+        Buffer.from(await voiceGet.arrayBuffer()),
+        webm
+    );
+
+    const forbiddenVoice = await fetch(voiceUrl, {
+        headers: {
+            Authorization: `Bearer ${outsiderToken}`,
+        },
+    });
+
+    assert.equal(forbiddenVoice.status, 404);
+
+    const history = store.getConversation(
+        recipient.id, sender.id
+    );
+
+    assert.equal(history.length, 2);
+    assert.equal(history[1].media.kind, 'voice');
+    assert.equal(readdirSync(directory).length, 2);
 });

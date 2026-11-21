@@ -6,16 +6,13 @@ import type {
 
 type Props = {
     media: MessageMedia;
-    connected: boolean;
 };
 
-export function MediaBubble({
-    media,
-    connected,
-}: Props) {
+export function MediaBubble({ media }: Props) {
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState(false);
     const [expanded, setExpanded] = useState(false);
+    const [retry, setRetry] = useState(0);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -24,10 +21,6 @@ export function MediaBubble({
 
         setUrl(null);
         setError(false);
-
-        if (!connected) {
-            return () => controller.abort();
-        }
 
         async function load() {
             try {
@@ -67,16 +60,24 @@ export function MediaBubble({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [media.id, connected]);
+    }, [media.id, retry]);
 
     if (!url) {
         return (
             <div className="media-placeholder">
-                {error
-                    ? 'Не удалось загрузить вложение'
-                    : connected
-                        ? 'Загружаем вложение…'
-                        : 'Вложение доступно при подключении'}
+                {error ? (
+                    <>
+                        <span>Не удалось загрузить вложение</span>
+                        <button
+                            type="button"
+                            onClick={() => setRetry(value => value + 1)}
+                        >
+                            Повторить
+                        </button>
+                    </>
+                ) : (
+                    'Загружаем вложение…'
+                )}
             </div>
         );
     }

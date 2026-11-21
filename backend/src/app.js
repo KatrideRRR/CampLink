@@ -622,8 +622,10 @@ export function createAppServer(options = {}) {
                 });
             }
 
+            let result;
+
             try {
-                const result = store.saveMediaMessage({
+                result = store.saveMediaMessage({
                     senderId: req.user.id,
                     recipientId,
                     clientMessageId,
@@ -634,33 +636,14 @@ export function createAppServer(options = {}) {
                     fileName,
                     bytes: req.body.length,
                 });
-
-                if (!result.created) {
-                    unlinkSync(path);
-                } else {
-                    io.to('user:' + req.user.id)
-                        .to('user:' + recipientId)
-                        .emit('chat:new', result.message);
-
-                    emitUnreadCount(
-                        recipientId,
-                        req.user.id
-                    );
-
-                    deliverPush(result.message);
-                }
-
-                return res.status(
-                    result.created ? 201 : 200
-                ).json({
-                    ok: true,
-                    message: result.message,
-                });
             } catch (error) {
                 try {
                     unlinkSync(path);
-                } catch {
-                    // Cleanup failure is logged below.
+                } catch (cleanupError) {
+                    console.error(
+                        '[Media] Cleanup failed:',
+                        cleanupError
+                    );
                 }
 
                 console.error(
@@ -672,6 +655,45 @@ export function createAppServer(options = {}) {
                     error: 'Media message could not be saved',
                 });
             }
+
+            if (!result.created) {
+                // Duplicate upload: keep the original file.
+                try {
+                    unlinkSync(path);
+                } catch (error) {
+                    console.error(
+                        '[Media] Duplicate cleanup failed:',
+                        error
+                    );
+                }
+            } else {
+                // A notification error must never delete
+                // an already committed attachment.
+                try {
+                    io.to('user:' + req.user.id)
+                        .to('user:' + recipientId)
+                        .emit('chat:new', result.message);
+
+                    emitUnreadCount(
+                        recipientId,
+                        req.user.id
+                    );
+
+                    deliverPush(result.message);
+                } catch (error) {
+                    console.error(
+                        '[Media] Notification failed:',
+                        error
+                    );
+                }
+            }
+
+            return res.status(
+                result.created ? 201 : 200
+            ).json({
+                ok: true,
+                message: result.message,
+            });
         }
     );
 
