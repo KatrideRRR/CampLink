@@ -74,7 +74,7 @@ button:disabled {
 }
 
 .login-card input,
-.composer input {
+.composer textarea {
     background: #26282e;
     color: white;
     border: 1px solid #393c44;
@@ -85,7 +85,7 @@ button:disabled {
 }
 
 .login-card input:focus,
-.composer input:focus {
+.composer textarea:focus {
     border-color: #e8ff72;
 }
 
@@ -308,7 +308,7 @@ button:disabled {
     border-top: 1px solid #303238;
 }
 
-.composer input {
+.composer textarea {
     flex: 1;
 }
 
@@ -368,7 +368,7 @@ button:disabled {
 }
 
 :root[data-theme='light'] .login-card input,
-:root[data-theme='light'] .composer input {
+:root[data-theme='light'] .composer textarea {
     background: #f4f6f9;
     color: #181b20;
     border-color: #cdd4dc;
@@ -673,7 +673,7 @@ body {
     gap: 8px;
 }
 
-.messenger.is-mobile .composer input {
+.messenger.is-mobile .composer textarea {
     font-size: 16px;
 }
 
@@ -1101,6 +1101,46 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
     .contact .avatar {
+        transition: none;
+    }
+}
+
+
+/* CampLink: multiline composer */
+
+.composer {
+    align-items: flex-end;
+}
+
+.composer textarea {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 48px;
+    max-height: 136px;
+    resize: none;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    font: inherit;
+    font-size: 16px;
+    line-height: 21px;
+    scrollbar-width: thin;
+}
+
+.composer button[type='submit'] {
+    flex-shrink: 0;
+    min-height: 48px;
+}
+
+/* Follow iOS keyboard movement instead of jumping. */
+
+:root.camplink-native-ios .messenger.is-mobile {
+    transition:
+        height 210ms ease-out,
+        top 210ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root.camplink-native-ios .messenger.is-mobile {
         transition: none;
     }
 }

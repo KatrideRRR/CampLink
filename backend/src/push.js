@@ -4,6 +4,9 @@ import {
     initializeApp,
 } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
+import {
+    buildMessagePushPayload,
+} from './push-payload.js';
 
 export function createFirebasePushSender() {
     if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -18,8 +21,13 @@ export function createFirebasePushSender() {
             'camplink-push'
         );
 
-    return async ({ tokens, message }) => {
+    return async ({ tokens, message, senderUsername }) => {
         const invalidTokens = [];
+
+        const payload = buildMessagePushPayload(
+            message,
+            senderUsername
+        );
 
         for (let start = 0; start < tokens.length; start += 500) {
             const batch = tokens.slice(start, start + 500);
@@ -28,15 +36,9 @@ export function createFirebasePushSender() {
                 .sendEachForMulticast({
                     tokens: batch,
 
-                    notification: {
-                        title: 'CampLink',
-                        body: 'Новое сообщение',
-                    },
+                    notification: payload.notification,
 
-                    data: {
-                        peerId: String(message.senderId),
-                        messageId: String(message.id),
-                    },
+                    data: payload.data,
 
                     apns: {
                         headers: {

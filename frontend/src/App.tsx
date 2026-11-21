@@ -1,5 +1,6 @@
 import {
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     type FormEvent,
@@ -374,7 +375,23 @@ function App() {
     const drainQueueRef = useRef<() => void>(() => {});
     const selectedPeerRef = useRef<number | null>(null);
     const messageListRef = useRef<HTMLDivElement | null>(null);
-    const composerInputRef = useRef<HTMLInputElement | null>(null);
+    const composerInputRef =
+        useRef<HTMLTextAreaElement | null>(null);
+
+    useLayoutEffect(() => {
+        const field = composerInputRef.current;
+        if (!field) return;
+
+        // Reset before measuring so deletion also shrinks it.
+        field.style.height = 'auto';
+        field.style.height =
+            `${Math.min(field.scrollHeight, 136)}px`;
+    }, [
+        draft,
+        selectedPeerId,
+        mobileChatOpen,
+        mobileView,
+    ]);
     const forceScrollAfterSendRef = useRef(false);
     const nearBottomRef = useRef(true);
     const previousScrollPeerRef = useRef<number | null>(null);
@@ -463,6 +480,37 @@ function App() {
             socket.connect();
         };
 
+        let keyboardFrame: number | null = null;
+
+        const followKeyboardAnimation = () => {
+            if (keyboardFrame !== null) {
+                window.cancelAnimationFrame(keyboardFrame);
+            }
+
+            const finishAt = performance.now() + 420;
+
+            const tick = () => {
+                if (keyboardFollowBottomRef.current) {
+                    const list = messageListRef.current;
+
+                    if (list) {
+                        list.scrollTop = list.scrollHeight;
+                        nearBottomRef.current = true;
+                    }
+                }
+
+                if (performance.now() < finishAt) {
+                    keyboardFrame =
+                        window.requestAnimationFrame(tick);
+                } else {
+                    keyboardFrame = null;
+                }
+            };
+
+            keyboardFrame =
+                window.requestAnimationFrame(tick);
+        };
+
         const scrollToLatest = () => {
             if (!keyboardFollowBottomRef.current) return;
 
@@ -482,7 +530,7 @@ function App() {
             });
         };
 
-        return observeIosLifecycle(
+        const stopObserving = observeIosLifecycle(
             reconnect,
             scrollToLatest,
             (available) => {
@@ -498,8 +546,16 @@ function App() {
             () => {
                 keyboardFollowBottomRef.current =
                     nearBottomRef.current;
+                followKeyboardAnimation();
             }
         );
+
+        return () => {
+            if (keyboardFrame !== null) {
+                window.cancelAnimationFrame(keyboardFrame);
+            }
+            stopObserving();
+        };
     }, []);
 
     const selectedPeer =
@@ -2290,13 +2346,16 @@ function App() {
                             className="composer"
                             onSubmit={handleSend}
                         >
-                            <input
+                            <textarea
                                 ref={composerInputRef}
                                 value={draft}
                                 onChange={(event) =>
                                     setDraft(event.target.value)
                                 }
                                 placeholder="Сообщение"
+                                aria-label="Текст сообщения"
+                                rows={1}
+                                enterKeyHint="enter"
                                 maxLength={2000}
                             />
 

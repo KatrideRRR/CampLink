@@ -10,8 +10,16 @@ test('FCM delivery: recipient, idempotency and invalid tokens',
         const { httpServer, io, store } = createAppServer({
             databasePath: ':memory:',
             emailGatewaySecret: secret,
-            pushSender: async ({ tokens, message }) => {
-                calls.push({ tokens, message });
+            pushSender: async ({
+                tokens,
+                message,
+                senderUsername,
+            }) => {
+                calls.push({
+                    tokens,
+                    message,
+                    senderUsername,
+                });
                 return [invalidToken];
             },
         });
@@ -122,6 +130,11 @@ test('FCM delivery: recipient, idempotency and invalid tokens',
         assert.equal(
             calls[0].message.senderId,
             sender.id
+        );
+
+        assert.equal(
+            calls[0].senderUsername,
+            'sender'
         );
 
         assert.equal(

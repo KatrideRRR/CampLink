@@ -140,6 +140,10 @@ export function createAppServer(options = {}) {
                 .then(() => options.pushSender({
                     message,
                     tokens,
+                    senderUsername:
+                        store.getUserById(
+                            message.senderId
+                        )?.username ?? null,
                 }))
                 .then((invalidTokens) => {
                     if (!Array.isArray(invalidTokens)) return;
