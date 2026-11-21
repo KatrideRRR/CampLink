@@ -1969,8 +1969,20 @@ function App() {
     ): Promise<void> {
         if (!me) throw new Error('Not authenticated');
 
-        // "Write" also stores the contact so it is
-        // not lost when the app is restarted.
+        // Existing conversation: open immediately.
+        // Do not make unnecessary network requests.
+        const alreadyInChats = peers.some(
+            peer => peer.id === user.id
+        );
+
+        if (alreadyInChats) {
+            if (openChat) {
+                selectPeer(user.id);
+            }
+            return;
+        }
+
+        // New contact: save it on the server first.
         await apiPost('/api/contacts', {
             peerId: user.id,
         });
