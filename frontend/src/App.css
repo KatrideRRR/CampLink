@@ -1894,3 +1894,96 @@ body {
 .registration-phone:focus-within {
     border-color: #788d28;
 }
+
+/* CampLink in-app notification sound toggle */
+
+.sound-toggle {
+    display: grid;
+    place-items: center;
+    padding: 0;
+}
+
+.sound-toggle svg {
+    width: 19px;
+    height: 19px;
+    display: block;
+}
+
+/* New message while reading older chat history */
+
+.incoming-bottom-hint {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 8;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+
+    width: min(340px, calc(100% - 28px));
+    padding: 11px 15px;
+
+    border: 1px solid #525962;
+    border-radius: 15px;
+    background: #292f36;
+    color: #fff;
+    text-align: left;
+
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .32);
+    cursor: pointer;
+}
+
+.incoming-bottom-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.incoming-bottom-title svg {
+    flex-shrink: 0;
+    color: #e8ff72;
+}
+
+.incoming-bottom-preview {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: #c2cbd0;
+}
+
+.incoming-bottom-hint:hover {
+    background: #343b43;
+}
+
+:root[data-theme='light'] .incoming-bottom-hint {
+    background: #fff;
+    color: #1c2228;
+    border-color: #d4dce4;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
+}
+
+:root[data-theme='light'] .incoming-bottom-title svg {
+    color: #637c16;
+}
+
+:root[data-theme='light'] .incoming-bottom-preview {
+    color: #646d77;
+}
+
+:root[data-theme='light'] .incoming-bottom-hint:hover {
+    background: #f3f6f9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .incoming-bottom-hint {
+        transition: none;
+    }
+}

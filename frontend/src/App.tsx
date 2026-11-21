@@ -99,6 +99,15 @@ import {
     RegistrationForm,
     type RegistrationPayload,
 } from './components/RegistrationForm';
+import {
+    readNotificationSoundEnabled,
+    saveNotificationSoundEnabled,
+    unlockNotificationSound,
+    playNotificationSound,
+} from './services/notification-sound';
+import {
+    decideIncomingNotice,
+} from './services/notification-policy';
 import './App.css';
 
 type User = {
@@ -471,6 +480,47 @@ function App() {
         name: string;
         text: string;
     } | null>(null);
+
+    const [newMessageAtBottom, setNewMessageAtBottom] =
+        useState<{
+            peerId: number;
+            text: string;
+        } | null>(null);
+
+    const [soundEnabled, setSoundEnabled] =
+        useState(readNotificationSoundEnabled);
+
+    useEffect(() => {
+        if (!me) return;
+
+        // Browsers require a user gesture before audio.
+        const unlock = () => {
+            void unlockNotificationSound();
+
+            document.removeEventListener(
+                'pointerdown', unlock
+            );
+            document.removeEventListener(
+                'keydown', unlock
+            );
+        };
+
+        document.addEventListener(
+            'pointerdown', unlock
+        );
+        document.addEventListener(
+            'keydown', unlock
+        );
+
+        return () => {
+            document.removeEventListener(
+                'pointerdown', unlock
+            );
+            document.removeEventListener(
+                'keydown', unlock
+            );
+        };
+    }, [me?.id]);
 
     const peersRef = useRef<User[]>([]);
 
@@ -1314,6 +1364,11 @@ function App() {
                     ? message.recipientId
                     : message.senderId;
 
+            const alreadyKnown = readOfflineMessages(
+                me.id,
+                partnerId
+            ).some(existing => existing.id === message.id);
+
             saveOfflineMessages(
                 me.id,
                 partnerId,
@@ -1338,25 +1393,45 @@ function App() {
 
             refreshContacts();
 
-            if (
-                message.senderId !== me.id &&
-                (
-                    message.senderId !== selectedPeerRef.current ||
-                    document.querySelector(
-                        '.messenger.is-mobile.mobile-contacts-open'
-                    ) !== null
-                ) &&
-                document.visibilityState === 'visible'
-            ) {
+            const viewingSenderChat =
+                message.senderId === selectedPeerRef.current &&
+                document.querySelector(
+                    '.messenger.is-mobile.mobile-contacts-open'
+                ) === null;
+
+            const notice = decideIncomingNotice({
+                isOwnMessage: message.senderId === me.id,
+                appVisible:
+                    document.visibilityState === 'visible',
+                alreadyKnown,
+                viewingSenderChat,
+                nearBottom: nearBottomRef.current,
+            });
+
+            if (notice === 'toast') {
                 const sender = peersRef.current.find(
                     peer => peer.id === message.senderId
                 );
 
                 setToast({
                     peerId: message.senderId,
-                    name: sender?.displayName ?? sender?.username ?? 'Новое сообщение',
+                    name:
+                        sender?.displayName ??
+                        sender?.username ??
+                        'Новое сообщение',
                     text: message.text,
                 });
+            }
+
+            if (notice === 'bottom') {
+                setNewMessageAtBottom({
+                    peerId: message.senderId,
+                    text: message.text,
+                });
+            }
+
+            if (notice !== 'none') {
+                playNotificationSound();
             }
 
             if (message.senderId === me.id) {
@@ -1694,6 +1769,7 @@ function App() {
 
     function returnToChats() {
         setMediaMenuOpen(false);
+        setNewMessageAtBottom(null);
         if (recordingVoice) stopVoiceRecording(true);
         cancelMessageTouch();
         setReactionMenuMessageId(null);
@@ -1753,6 +1829,7 @@ function App() {
         );
 
         if (nearBottom) {
+            setNewMessageAtBottom(null);
             markVisibleMessagesRead();
         }
     }
@@ -1765,6 +1842,7 @@ function App() {
 
         nearBottomRef.current = true;
         setShowJumpToBottom(false);
+        setNewMessageAtBottom(null);
 
         list.scrollTo({
             top: list.scrollHeight,
@@ -1859,6 +1937,7 @@ function App() {
 
     function selectPeer(id: number) {
         setMediaMenuOpen(false);
+        setNewMessageAtBottom(null);
         if (
             recordingVoice &&
             selectedPeerRef.current !== id
@@ -2043,6 +2122,8 @@ function App() {
 
         setUnreadCounts({});
         setPendingMessages([]);
+        setToast(null);
+        setNewMessageAtBottom(null);
         setReplyTo(null);
         setReactionMenuMessageId(null);
         lastReadSentRef.current = null;
@@ -2560,6 +2641,57 @@ function App() {
 
                         <button
                             type="button"
+                            className="theme-button sound-toggle"
+                            title={
+                                soundEnabled
+                                    ? 'Выключить звук сообщений'
+                                    : 'Включить звук сообщений'
+                            }
+                            aria-label={
+                                soundEnabled
+                                    ? 'Выключить звук сообщений'
+                                    : 'Включить звук сообщений'
+                            }
+                            aria-pressed={soundEnabled}
+                            onClick={() => {
+                                const next = !soundEnabled;
+
+                                setSoundEnabled(next);
+                                saveNotificationSoundEnabled(next);
+
+                                void unlockNotificationSound()
+                                    .then(() => {
+                                        if (next) {
+                                            playNotificationSound();
+                                        }
+                                    });
+                            }}
+                        >
+                            <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+                                {soundEnabled ? (
+                                    <>
+                                        <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                                        <path d="M18 5a9 9 0 0 1 0 14" />
+                                    </>
+                                ) : (
+                                    <path d="m16 9 5 6m0-6-5 6" />
+                                )}
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
                             className="theme-button"
                             onClick={cycleTheme}
                             title={`Тема: ${themeLabel}`}
@@ -2953,7 +3085,40 @@ function App() {
                             
                         </div>
 
-                            {showJumpToBottom && (
+                            {newMessageAtBottom?.peerId ===
+                                selectedPeerId && (
+                                <button
+                                    type="button"
+                                    className="incoming-bottom-hint"
+                                    onClick={() =>
+                                        scrollToChatBottom('smooth')
+                                    }
+                                >
+                                    <span className="incoming-bottom-title">
+                                        <svg
+                                            width="18"
+                                            height="18"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <path d="M12 5v14m-7-7 7 7 7-7" />
+                                        </svg>
+                                        Новое сообщение
+                                    </span>
+                                    <span className="incoming-bottom-preview">
+                                        {newMessageAtBottom.text}
+                                    </span>
+                                </button>
+                            )}
+
+                            {showJumpToBottom &&
+                                newMessageAtBottom?.peerId !==
+                                    selectedPeerId && (
                                 <button
                                     type="button"
                                     className="jump-to-bottom"
