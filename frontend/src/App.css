@@ -1407,3 +1407,68 @@ body {
         flex-basis: 36px;
     }
 }
+
+
+/* CampLink: centered vector composer icons */
+
+.composer .composer-attach {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 48px;
+}
+
+.composer button.composer-plus,
+.composer button.composer-main-action,
+.composer button.composer-cancel {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    line-height: 0;
+}
+
+.composer button.composer-main-action,
+.composer button.composer-cancel {
+    margin-bottom: 2px;
+}
+
+.composer .composer-action-icon {
+    display: block;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.composer button.composer-plus .composer-action-icon {
+    width: 24px;
+    height: 24px;
+}
+
+@media (max-width: 900px) {
+    .messenger.is-mobile .composer .composer-attach {
+        flex: 0 0 42px;
+        width: 42px;
+        height: 48px;
+    }
+
+    .messenger.is-mobile .composer button.composer-plus,
+    .messenger.is-mobile .composer button.composer-main-action,
+    .messenger.is-mobile .composer button.composer-cancel {
+        width: 42px;
+        height: 42px;
+        min-height: 42px;
+        padding: 0;
+    }
+
+    .messenger.is-mobile .composer button.composer-main-action,
+    .messenger.is-mobile .composer button.composer-cancel {
+        margin-bottom: 3px;
+    }
+}
