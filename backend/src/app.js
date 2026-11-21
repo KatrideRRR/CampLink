@@ -858,8 +858,11 @@ export function createAppServer(options = {}) {
 
             if (
                 typeof q !== 'string' ||
-                q.length < 3 ||
-                q.length > 64
+                q.length > 64 ||
+                (
+                    q.length < 3 &&
+                    !/^#[1-9]$/.test(q)
+                )
             ) {
                 return res.status(400).json({
                     error: 'Invalid search',

@@ -54,10 +54,13 @@ export function NewChatDialog({
         const digits = q.replace(/\D/g, '');
         const phoneQuery = /^[\d\s+()-]+$/.test(q);
 
-        const valid =
+        const byId = /^#[1-9]\d{0,14}$/.test(q);
+
+        const valid = byId || (
             q.length >= 3 &&
             q.length <= 64 &&
-            (!phoneQuery || digits.length >= 7);
+            (!phoneQuery || digits.length >= 7)
+        );
 
         setUsers([]);
         setError('');
@@ -160,7 +163,7 @@ export function NewChatDialog({
                         onChange={event =>
                             setQuery(event.target.value)
                         }
-                        placeholder="Никнейм, телефон или email"
+                        placeholder="Имя, телефон, email или #ID"
                         aria-label="Поиск пользователей"
                         autoComplete="off"
                         maxLength={64}
@@ -182,8 +185,9 @@ export function NewChatDialog({
 
                     {!loading && users.length === 0 && (
                         <p className="new-chat-hint">
-                            {query.trim().length < 3
-                                ? 'Начните вводить никнейм, телефон или email'
+                            {query.trim().length < 3 &&
+                             !/^#[1-9]\d{0,14}$/.test(query.trim())
+                                ? 'Введите имя, телефон, email или #ID'
                                 : 'Совпадений пока нет'}
                         </p>
                     )}

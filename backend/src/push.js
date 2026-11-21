@@ -47,7 +47,7 @@ export function createFirebasePushSender() {
                         },
                         payload: {
                             aps: {
-                                sound: 'default',
+                                sound: 'camplink_message.wav',
                             },
                         },
                     },

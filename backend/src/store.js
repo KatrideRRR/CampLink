@@ -369,6 +369,28 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
                 .replace(/\s+/g, ' ')
                 .toLocaleLowerCase('ru');
 
+            // A # prefix distinguishes user IDs from phones.
+            if (/^#[1-9]\d{0,14}$/.test(text)) {
+                const id = Number(text.slice(1));
+
+                if (!Number.isSafeInteger(id)) {
+                    return [];
+                }
+
+                const user = db.prepare(`
+                    SELECT
+                        id,
+                        username,
+                        COALESCE(
+                            display_name, username
+                        ) AS displayName
+                    FROM users
+                    WHERE id = ? AND id <> ?
+                `).get(id, viewerId);
+
+                return user ? [user] : [];
+            }
+
             const name = text.replace(/^@/, '');
             const digits = text.replace(/\D/g, '');
             const clauses = [];
