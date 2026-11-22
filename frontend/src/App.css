@@ -2596,3 +2596,137 @@ body {
         animation: none;
     }
 }
+
+
+/* Build 4 stage 3: responsive new-chat dialog */
+
+.new-chat-overlay {
+    position: fixed;
+    top: var(--camplink-viewport-top, 0px);
+    left: 0;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    max-width: 100vw;
+    height: var(--camplink-viewport-height, 100dvh);
+    min-height: 0;
+    box-sizing: border-box;
+
+    padding:
+        max(12px, env(safe-area-inset-top, 0px))
+        max(14px, env(safe-area-inset-right, 0px))
+        max(12px, env(safe-area-inset-bottom, 0px))
+        max(14px, env(safe-area-inset-left, 0px));
+
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.new-chat-dialog {
+    box-sizing: border-box;
+    flex: 0 1 400px;
+    width: 100%;
+    min-width: 0;
+    max-width: 400px;
+    max-height: 100%;
+    padding: 18px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 18px;
+}
+
+.new-chat-dialog header {
+    margin-bottom: 12px;
+    min-width: 0;
+}
+
+.new-chat-close {
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+}
+
+.new-chat-search,
+.new-chat-search input {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.new-chat-search input {
+    font-size: 16px;
+    line-height: 1.25;
+    min-height: 48px;
+    -webkit-text-size-adjust: 100%;
+}
+
+.new-chat-results {
+    min-height: 64px;
+    max-height: min(280px, 35dvh);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.new-chat-user {
+    min-width: 0;
+}
+
+.new-chat-user-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.new-chat-user-actions {
+    flex-shrink: 0;
+}
+
+.new-chat-user-actions button {
+    min-height: 36px;
+}
+
+:root.camplink-native-ios .new-chat-overlay {
+    padding-top: max(60px, env(safe-area-inset-top, 0px));
+}
+
+@media (max-width: 520px) {
+    .new-chat-overlay {
+        align-items: flex-start;
+        justify-content: center;
+    }
+
+    .new-chat-dialog {
+        flex: 0 1 100%;
+        padding: 16px;
+    }
+
+    .new-chat-user {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .new-chat-user-actions {
+        margin-left: auto;
+    }
+
+    .new-chat-footer {
+        font-size: 11px;
+    }
+}
+
+@media (max-height: 480px) {
+    .new-chat-overlay {
+        align-items: flex-start;
+    }
+
+    .new-chat-dialog {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+
+    .new-chat-results {
+        max-height: 140px;
+    }
+}

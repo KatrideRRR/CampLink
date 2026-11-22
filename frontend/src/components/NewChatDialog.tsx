@@ -4,6 +4,8 @@ import {
     useState,
 } from 'react';
 import { apiFetch } from '../services/native-auth';
+import { Capacitor } from '@capacitor/core';
+import { createPortal } from 'react-dom';
 
 export type FoundUser = {
     id: number;
@@ -33,8 +35,19 @@ export function NewChatDialog({
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        inputRef.current?.focus();
+        // Do not open the virtual keyboard automatically.
+        // Keep desktop keyboard navigation convenient.
+        const isTouchDevice =
+            window.matchMedia('(pointer: coarse)').matches;
 
+        if (!Capacitor.isNativePlatform() && !isTouchDevice) {
+            inputRef.current?.focus({
+                preventScroll: true,
+            });
+        }
+    }, []);
+
+    useEffect(() => {
         function onKeyDown(event: KeyboardEvent) {
             if (event.key === 'Escape') onClose();
         }
@@ -128,10 +141,10 @@ export function NewChatDialog({
         }
     }
 
-    return (
+    return createPortal(
         <div
             className="new-chat-overlay"
-            onMouseDown={event => {
+            onClick={event => {
                 if (event.target === event.currentTarget) {
                     onClose();
                 }
@@ -163,7 +176,7 @@ export function NewChatDialog({
                         onChange={event =>
                             setQuery(event.target.value)
                         }
-                        placeholder="Имя, телефон, email или #ID"
+                        placeholder="Имя, телефон, email, #ID"
                         aria-label="Поиск пользователей"
                         autoComplete="off"
                         maxLength={64}
@@ -252,6 +265,7 @@ export function NewChatDialog({
                     других пользователей скрыты.
                 </p>
             </section>
-        </div>
+        </div>,
+        document.body
     );
 }
