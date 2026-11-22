@@ -224,23 +224,38 @@ export function createAppServer(options = {}) {
         );
     }
 
+    function broadcastSavedMessage(message) {
+        io.to(`user:${message.senderId}`)
+            .to(`user:${message.recipientId}`)
+            .emit('chat:new', message);
+
+        emitUnreadCount(
+            message.recipientId,
+            message.senderId
+        );
+
+        deliverPush(message);
+    }
+
     function persistAndBroadcast(payload) {
         const result = store.saveMessage(payload);
 
         if (result.created) {
-            io.to(`user:${payload.senderId}`)
-                .to(`user:${payload.recipientId}`)
-                .emit('chat:new', result.message);
-
-            emitUnreadCount(
-                payload.recipientId,
-                payload.senderId
-            );
-
-            deliverPush(result.message);
+            broadcastSavedMessage(result.message);
         }
 
         return result;
+    }
+
+    function dispatchScheduledMessages(now = Date.now()) {
+        const messages =
+            store.dispatchDueScheduledMessages(now);
+
+        for (const message of messages) {
+            broadcastSavedMessage(message);
+        }
+
+        return messages;
     }
 
     const loginAttempts = new Map();
@@ -1047,6 +1062,140 @@ export function createAppServer(options = {}) {
         }
     );
 
+    // Scheduled messages use the authenticated sender.
+    function validateScheduledOrigin(req, res, next) {
+        const origin = req.get('origin');
+
+        if (
+            origin &&
+            !allowedOrigins.includes(origin) &&
+            !nativeOrigins.has(origin)
+        ) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
+
+        next();
+    }
+
+    app.get('/api/scheduled-messages', requireAuth, (req, res) => {
+        let peerId = null;
+
+        if (req.query.peerId !== undefined) {
+            peerId = Number(req.query.peerId);
+
+            if (
+                !Number.isSafeInteger(peerId) ||
+                peerId <= 0
+            ) {
+                return res.status(400).json({
+                    error: 'Invalid peer ID',
+                });
+            }
+        }
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.json({
+            items: store.listScheduledMessages(
+                req.user.id,
+                peerId
+            ),
+        });
+    });
+
+    app.post(
+        '/api/scheduled-messages',
+        requireAuth,
+        validateScheduledOrigin,
+        (req, res) => {
+            const {
+                recipientId,
+                clientMessageId,
+                text,
+                scheduledAt,
+            } = req.body ?? {};
+
+            const time =
+                typeof scheduledAt === 'string'
+                    ? Date.parse(scheduledAt)
+                    : NaN;
+
+            const now = Date.now();
+
+            if (
+                !Number.isSafeInteger(recipientId) ||
+                recipientId <= 0 ||
+                recipientId === req.user.id ||
+                !store.getUserById(recipientId) ||
+                typeof clientMessageId !== 'string' ||
+                !/^[a-f0-9-]{36}$/i.test(clientMessageId) ||
+                typeof text !== 'string' ||
+                !text.trim() ||
+                text.length > 2000 ||
+                typeof scheduledAt !== 'string' ||
+                !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAt) ||
+                !Number.isFinite(time) ||
+                time < now + 60000 ||
+                time > now + 90 * 24 * 60 * 60 * 1000
+            ) {
+                return res.status(400).json({
+                    error: 'Invalid schedule',
+                });
+            }
+
+            try {
+                const result = store.scheduleMessage({
+                    senderId: req.user.id,
+                    recipientId,
+                    clientMessageId,
+                    text: text.trim(),
+                    scheduledAt: time,
+                });
+
+                res.set('Cache-Control', 'no-store');
+
+                return res.status(
+                    result.created ? 201 : 200
+                ).json({
+                    ok: true,
+                    id: result.id,
+                    created: result.created,
+                });
+            } catch {
+                return res.status(409).json({
+                    error: 'Schedule conflict or limit',
+                });
+            }
+        }
+    );
+
+    app.delete(
+        '/api/scheduled-messages/:id',
+        requireAuth,
+        validateScheduledOrigin,
+        (req, res) => {
+            const id = Number(req.params.id);
+
+            if (
+                !Number.isSafeInteger(id) ||
+                id <= 0
+            ) {
+                return res.status(400).json({
+                    error: 'Invalid schedule ID',
+                });
+            }
+
+            const canceled =
+                store.cancelScheduledMessage(req.user.id, id);
+
+            return canceled
+                ? res.sendStatus(204)
+                : res.sendStatus(404);
+        }
+    );
+
     app.post('/api/contacts', requireAuth, (req, res) => {
         const origin = req.get('origin');
 
@@ -1324,5 +1473,11 @@ export function createAppServer(options = {}) {
         });
     });
 
-    return { app, httpServer, io, store };
+    return {
+        app,
+        httpServer,
+        io,
+        store,
+        dispatchScheduledMessages,
+    };
 }

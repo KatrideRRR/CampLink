@@ -197,6 +197,34 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
         );
     `);
 
+
+    // Build 4: durable scheduled text messages.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS scheduled_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER NOT NULL
+                REFERENCES users(id),
+            recipient_id INTEGER NOT NULL
+                REFERENCES users(id),
+            client_message_id TEXT NOT NULL,
+            text TEXT NOT NULL,
+            scheduled_at INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'sent')),
+            delivered_message_id INTEGER
+                REFERENCES messages(id),
+            UNIQUE(sender_id, client_message_id),
+            CHECK(sender_id <> recipient_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_scheduled_due
+            ON scheduled_messages(status, scheduled_at, id);
+
+        CREATE INDEX IF NOT EXISTS idx_scheduled_owner
+            ON scheduled_messages(sender_id, recipient_id, status);
+    `);
+
     const messageColumns = db.pragma(
         'table_info(messages)'
     );
@@ -856,6 +884,164 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
         WHERE id != ?
         ORDER BY username
       `).all(excludeId);
+        },
+
+        listScheduledMessages(senderId, recipientId = null) {
+            const query = recipientId === null
+                ? `
+                    SELECT * FROM scheduled_messages
+                    WHERE sender_id = ? AND status = 'pending'
+                    ORDER BY scheduled_at, id
+                    LIMIT 100
+                `
+                : `
+                    SELECT * FROM scheduled_messages
+                    WHERE sender_id = ?
+                      AND recipient_id = ?
+                      AND status = 'pending'
+                    ORDER BY scheduled_at, id
+                    LIMIT 100
+                `;
+
+            const rows = recipientId === null
+                ? db.prepare(query).all(senderId)
+                : db.prepare(query).all(senderId, recipientId);
+
+            return rows.map(row => ({
+                id: row.id,
+                senderId: row.sender_id,
+                recipientId: row.recipient_id,
+                clientMessageId: row.client_message_id,
+                text: row.text,
+                scheduledAt:
+                    new Date(row.scheduled_at).toISOString(),
+                createdAt: row.created_at,
+                status: row.status,
+            }));
+        },
+
+        scheduleMessage({
+            senderId,
+            recipientId,
+            clientMessageId,
+            text,
+            scheduledAt,
+        }) {
+            return db.transaction(() => {
+                const existing = db.prepare(`
+                    SELECT * FROM scheduled_messages
+                    WHERE sender_id = ?
+                      AND client_message_id = ?
+                `).get(senderId, clientMessageId);
+
+                if (existing) {
+                    if (
+                        existing.recipient_id !== recipientId ||
+                        existing.text !== text ||
+                        existing.scheduled_at !== scheduledAt
+                    ) {
+                        throw new Error('Schedule ID conflict');
+                    }
+
+                    return {
+                        created: false,
+                        id: existing.id,
+                    };
+                }
+
+                const used = db.prepare(`
+                    SELECT id FROM messages
+                    WHERE sender_id = ?
+                      AND client_message_id = ?
+                `).get(senderId, clientMessageId);
+
+                if (used) {
+                    throw new Error('Message ID already used');
+                }
+
+                const count = db.prepare(`
+                    SELECT COUNT(*) AS count
+                    FROM scheduled_messages
+                    WHERE sender_id = ?
+                      AND status = 'pending'
+                `).get(senderId).count;
+
+                if (count >= 100) {
+                    throw new Error('Schedule limit reached');
+                }
+
+                const result = db.prepare(`
+                    INSERT INTO scheduled_messages (
+                        sender_id,
+                        recipient_id,
+                        client_message_id,
+                        text,
+                        scheduled_at,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                `).run(
+                    senderId,
+                    recipientId,
+                    clientMessageId,
+                    text,
+                    scheduledAt,
+                    new Date().toISOString()
+                );
+
+                return {
+                    created: true,
+                    id: Number(result.lastInsertRowid),
+                };
+            }).immediate();
+        },
+
+        cancelScheduledMessage(senderId, scheduleId) {
+            return db.prepare(`
+                DELETE FROM scheduled_messages
+                WHERE id = ?
+                  AND sender_id = ?
+                  AND status = 'pending'
+            `).run(scheduleId, senderId).changes === 1;
+        },
+
+        dispatchDueScheduledMessages(
+            now = Date.now(),
+            limit = 50
+        ) {
+            return db.transaction(() => {
+                const due = db.prepare(`
+                    SELECT * FROM scheduled_messages
+                    WHERE status = 'pending'
+                      AND scheduled_at <= ?
+                    ORDER BY scheduled_at, id
+                    LIMIT ?
+                `).all(now, limit);
+
+                const created = [];
+
+                for (const item of due) {
+                    const result = this.saveMessage({
+                        senderId: item.sender_id,
+                        recipientId: item.recipient_id,
+                        clientMessageId:
+                            item.client_message_id,
+                        text: item.text,
+                    });
+
+                    db.prepare(`
+                        UPDATE scheduled_messages
+                        SET status = 'sent',
+                            delivered_message_id = ?
+                        WHERE id = ? AND status = 'pending'
+                    `).run(result.message.id, item.id);
+
+                    if (result.created) {
+                        created.push(result.message);
+                    }
+                }
+
+                return created;
+            }).immediate();
         },
 
         saveMessage({

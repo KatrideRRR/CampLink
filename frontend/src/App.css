@@ -3499,3 +3499,227 @@ body {
         will-change: auto;
     }
 }
+
+/* Build 4: scheduled message sending */
+
+.composer button.composer-schedule {
+    display: grid;
+    place-items: center;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid #4b5d37;
+    border-radius: 50%;
+    background: #2f3a2a;
+    color: #e8ff72;
+}
+
+.composer button.composer-schedule:disabled {
+    opacity: .45;
+}
+
+.scheduled-list {
+    padding: 10px 14px;
+    max-height: 190px;
+    overflow-y: auto;
+    border-top: 1px solid #373f37;
+    background: #222820;
+}
+
+.scheduled-list > strong {
+    display: block;
+    font-size: 12px;
+    color: #d5e79e;
+    margin-bottom: 7px;
+}
+
+.scheduled-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px;
+    border-radius: 10px;
+    background: #2d352a;
+    margin-top: 5px;
+}
+
+.scheduled-item > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.scheduled-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.scheduled-item small {
+    color: #b8c6ac;
+    font-size: 11px;
+}
+
+.scheduled-item button {
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 9px;
+    padding: 8px 10px;
+    background: #484033;
+    color: #ffe1b7;
+    font-size: 12px;
+}
+
+.scheduled-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 0, 0, .74);
+    backdrop-filter: blur(5px);
+}
+
+.scheduled-dialog {
+    width: min(100%, 410px);
+    max-height: 90dvh;
+    overflow-y: auto;
+    padding: 20px;
+    border: 1px solid #4d554a;
+    border-radius: 20px;
+    background: #22272a;
+    color: #f6f8f5;
+    box-shadow: 0 16px 50px #0006;
+}
+
+.scheduled-dialog header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.scheduled-dialog h2 {
+    font-size: 20px;
+    margin: 0;
+}
+
+.scheduled-dialog header button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 25px;
+}
+
+.scheduled-preview {
+    margin: 0 0 16px;
+    padding: 11px;
+    border-radius: 11px;
+    background: #303638;
+    font-size: 13px;
+    line-height: 1.5;
+    max-height: 90px;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+
+.scheduled-presets {
+    display: grid;
+    gap: 7px;
+}
+
+.scheduled-presets button {
+    text-align: left;
+    padding: 12px;
+    border: 1px solid #48534a;
+    border-radius: 11px;
+    background: #303730;
+    color: inherit;
+    font-size: 13px;
+}
+
+.scheduled-presets button.selected {
+    border-color: #d3ed78;
+    background: #39472d;
+    color: #e8ff72;
+}
+
+.scheduled-date-label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 13px;
+}
+
+.scheduled-date-label input {
+    width: 100%;
+    max-width: 100%;
+    min-height: 46px;
+    padding: 10px;
+    border: 1px solid #576054;
+    border-radius: 12px;
+    background: #343c36;
+    color: inherit;
+    color-scheme: dark;
+    font: inherit;
+    font-size: 16px;
+}
+
+.scheduled-confirm {
+    width: 100%;
+    min-height: 46px;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 13px;
+    background: #e8ff72;
+    color: #1b2711;
+    font-weight: 700;
+}
+
+.scheduled-confirm:disabled {
+    opacity: .5;
+}
+
+.scheduled-error {
+    color: #ff9eaa;
+    font-size: 12px;
+}
+
+:root[data-theme='light'] .scheduled-list,
+:root[data-theme='light'] .scheduled-item,
+:root[data-theme='light'] .scheduled-dialog {
+    background: #fff;
+    color: #20262b;
+}
+
+:root[data-theme='light'] .scheduled-preview,
+:root[data-theme='light'] .scheduled-presets button,
+:root[data-theme='light'] .scheduled-date-label input {
+    background: #f1f5ed;
+    color: #20262b;
+    color-scheme: light;
+}
+
+:root[data-theme='light'] .scheduled-presets button.selected {
+    background: #e6f2cb;
+    color: #355513;
+}
+
+:root[data-theme='light'] .scheduled-item small {
+    color: #657361;
+}
+
+@media (max-width: 380px) {
+    .messenger.is-mobile .composer button.composer-schedule {
+        flex-basis: 34px;
+        width: 34px;
+        height: 42px;
+    }
+}

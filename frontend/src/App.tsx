@@ -125,6 +125,13 @@ import {
     type PushTestResult,
 } from './components/SettingsPage';
 import { PasskeySetupPrompt } from './components/PasskeySetupPrompt';
+import { ScheduledSendDialog } from './components/ScheduledSendDialog';
+import {
+    listScheduledMessages,
+    createScheduledMessage,
+    cancelScheduledMessage,
+    type ScheduledMessage,
+} from './services/scheduled-messages';
 import {
     listCampLinkPasskeys,
     passkeysAvailable,
@@ -430,6 +437,42 @@ function App() {
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [draft, setDraft] = useState('');
+
+    const [scheduledDialogOpen, setScheduledDialogOpen] =
+        useState(false);
+
+    const [scheduledMessages, setScheduledMessages] =
+        useState<ScheduledMessage[]>([]);
+
+    const [cancelingScheduleId, setCancelingScheduleId] =
+        useState<number | null>(null);
+
+    const scheduledSubmissionRef = useRef<{
+        clientMessageId: string;
+        recipientId: number;
+        text: string;
+        scheduledAt: string;
+    } | null>(null);
+
+    useEffect(() => {
+        if (!me || selectedPeerId === null) return;
+
+        let active = true;
+
+        void listScheduledMessages(selectedPeerId)
+            .then(items => {
+                if (active) {
+                    setScheduledMessages(items);
+                }
+            })
+            .catch(() => {
+                // Chat is still available if scheduling is offline.
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [me?.id, selectedPeerId]);
 
     const galleryInputRef =
         useRef<HTMLInputElement | null>(null);
@@ -1535,6 +1578,15 @@ function App() {
             ));
 
             refreshContacts();
+
+            if (
+                message.senderId === me.id &&
+                partnerId === selectedPeerRef.current
+            ) {
+                void listScheduledMessages(partnerId)
+                    .then(items => setScheduledMessages(items))
+                    .catch(() => {});
+            }
 
             const viewingSenderChat =
                 message.senderId === selectedPeerRef.current &&
@@ -2995,6 +3047,84 @@ function App() {
         stopVoiceRecording(true);
     }
 
+    async function handleScheduleMessage(
+        scheduledAt: string
+    ): Promise<boolean> {
+        const text = draft.trim();
+
+        if (
+            !me ||
+            selectedPeerId === null ||
+            !text ||
+            text.length > 2000 ||
+            replyTo
+        ) {
+            return false;
+        }
+
+        const previous = scheduledSubmissionRef.current;
+
+        const request = previous &&
+            previous.recipientId === selectedPeerId &&
+            previous.text === text &&
+            previous.scheduledAt === scheduledAt
+            ? previous
+            : {
+                clientMessageId: crypto.randomUUID(),
+                recipientId: selectedPeerId,
+                text,
+                scheduledAt,
+            };
+
+        scheduledSubmissionRef.current = request;
+
+        try {
+            await createScheduledMessage(request);
+
+            const items = await listScheduledMessages(
+                request.recipientId
+            );
+
+            if (
+                selectedPeerRef.current === request.recipientId
+            ) {
+                setScheduledMessages(items);
+            }
+
+            scheduledSubmissionRef.current = null;
+            setScheduledDialogOpen(false);
+            setDraft('');
+            setError('');
+
+            return true;
+        } catch {
+            setError(
+                'Не удалось запланировать отправку. ' +
+                'Проверьте соединение с сервером.'
+            );
+
+            return false;
+        }
+    }
+
+    async function handleCancelScheduled(id: number) {
+        setCancelingScheduleId(id);
+
+        try {
+            await cancelScheduledMessage(id);
+
+            setScheduledMessages(items =>
+                items.filter(item => item.id !== id)
+            );
+
+            setError('');
+        } catch {
+            setError('Не удалось отменить отправку');
+        } finally {
+            setCancelingScheduleId(null);
+        }
+    }
+
     function handleSend(event: FormEvent) {
         event.preventDefault();
 
@@ -3710,6 +3840,57 @@ function App() {
                             </div>
                         )}
 
+                        {scheduledMessages
+                            .filter(item =>
+                                item.recipientId === selectedPeerId
+                            ).length > 0 && (
+                            <div className="scheduled-list">
+                                <strong>Запланированные сообщения</strong>
+
+                                {scheduledMessages
+                                    .filter(item =>
+                                        item.recipientId === selectedPeerId
+                                    )
+                                    .map(item => (
+                                        <div
+                                            className="scheduled-item"
+                                            key={item.id}
+                                        >
+                                            <div>
+                                                <span>
+                                                    {item.text}
+                                                </span>
+                                                <small>
+                                                    {new Date(
+                                                        item.scheduledAt
+                                                    ).toLocaleString('ru-RU', {
+                                                        day: '2-digit',
+                                                        month: '2-digit',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </small>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                disabled={
+                                                    cancelingScheduleId ===
+                                                    item.id
+                                                }
+                                                onClick={() =>
+                                                    void handleCancelScheduled(
+                                                        item.id
+                                                    )
+                                                }
+                                            >
+                                                Отменить
+                                            </button>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
+
                         <form
                             className={
                                 recordingVoice
@@ -3899,6 +4080,36 @@ function App() {
                                 />
                             )}
 
+                            {!recordingVoice &&
+                                !replyTo &&
+                                draft.trim() && (
+                                <button
+                                    type="button"
+                                    className="composer-schedule"
+                                    aria-label="Отправить позже"
+                                    title="Отложенная отправка"
+                                    disabled={uploadingMedia}
+                                    onClick={() =>
+                                        setScheduledDialogOpen(true)
+                                    }
+                                >
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        width="22"
+                                        height="22"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden="true"
+                                    >
+                                        <circle cx="12" cy="12" r="9" />
+                                        <path d="M12 7v5l3 2" />
+                                    </svg>
+                                </button>
+                            )}
+
                             {recordingVoice ? (
                                 <div className="composer-record-actions">
                                     <button
@@ -4031,6 +4242,16 @@ function App() {
                     </div>
                 )}
             </section>
+
+            {scheduledDialogOpen &&
+                selectedPeerId !== null &&
+                draft.trim() && (
+                <ScheduledSendDialog
+                    text={draft.trim()}
+                    onClose={() => setScheduledDialogOpen(false)}
+                    onSchedule={handleScheduleMessage}
+                />
+            )}
 
             {toast && (
                 <button
