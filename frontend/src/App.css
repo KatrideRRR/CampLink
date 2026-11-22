@@ -3222,3 +3222,167 @@ body {
 :root[data-theme='light'] .settings-passkey-ok {
     color: #327641;
 }
+
+/* Build 4: passkey onboarding and persistent status */
+
+.passkey-offer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 8500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(20px, env(safe-area-inset-top, 0px))
+             18px
+             max(20px, env(safe-area-inset-bottom, 0px));
+    background: rgba(0, 0, 0, .76);
+    backdrop-filter: blur(5px);
+}
+
+.passkey-offer-card {
+    width: min(100%, 380px);
+    padding: 26px 22px;
+    border: 1px solid #3c4550;
+    border-radius: 22px;
+    background: #20242b;
+    color: #f7f8fa;
+    text-align: center;
+    box-shadow: 0 16px 45px #0006;
+}
+
+.passkey-offer-icon {
+    display: grid;
+    place-items: center;
+    margin: 0 auto 15px;
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    background: #364328;
+    color: #e8ff72;
+}
+
+.passkey-offer-card h2 {
+    font-size: 21px;
+    margin: 0 0 12px;
+}
+
+.passkey-offer-card p {
+    color: #b8c0ca;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.passkey-offer-enable,
+.passkey-offer-later {
+    width: 100%;
+    min-height: 46px;
+    border-radius: 13px;
+    font-size: 14px;
+}
+
+.passkey-offer-enable {
+    margin-top: 16px;
+    border: 0;
+    background: #e8ff72;
+    color: #172014;
+    font-weight: 700;
+}
+
+.passkey-offer-later {
+    margin-top: 8px;
+    border: 0;
+    background: transparent;
+    color: #bec5ce;
+}
+
+.settings-key-status {
+    margin: 12px 0 0;
+    font-size: 13px;
+    color: #b6df86;
+}
+
+:root[data-theme='light'] .passkey-offer-card {
+    background: #fff;
+    color: #1b2026;
+    border-color: #d9dfe6;
+}
+
+:root[data-theme='light'] .passkey-offer-card p {
+    color: #596474;
+}
+
+:root[data-theme='light'] .settings-key-status {
+    color: #52791d;
+}
+
+/* Voice messages: compact accessible reaction button */
+
+.voice-player-react {
+    display: grid;
+    place-items: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #d7e5c8;
+}
+
+.message.incoming .voice-player-react {
+    color: #cbd3df;
+}
+
+.voice-player-react:active {
+    transform: scale(1.12);
+}
+
+.message.voice-only .reaction-picker {
+    z-index: 35;
+}
+
+/* Recording: microphone follows the user's finger */
+
+.voice-drag-mic {
+    position: absolute;
+    z-index: 15;
+    right: 13px;
+    bottom: 53px;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #e8ff72;
+    color: #172014;
+    box-shadow:
+        0 8px 25px #0005,
+        0 0 0 8px rgba(232,255,114,.12);
+    pointer-events: none;
+    transform:
+        translate3d(
+            calc(var(--voice-cancel-progress, 0) * -45px),
+            calc(var(--voice-lift, 0) * -92px),
+            0
+        )
+        scale(calc(1 + var(--voice-lift, 0) * .16));
+    will-change: transform;
+    animation: voice-drag-appear 150ms ease-out both;
+}
+
+@keyframes voice-drag-appear {
+    from { opacity: .3; }
+    to { opacity: 1; }
+}
+
+.composer.is-voice-recording .voice-drag-mic {
+    background: #e8ff72;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .voice-drag-mic {
+        animation: none;
+        will-change: auto;
+    }
+}

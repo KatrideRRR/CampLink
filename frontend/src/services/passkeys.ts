@@ -88,3 +88,25 @@ export async function loginWithCampLinkPasskey():
         }
     );
 }
+
+export type RegisteredPasskey = {
+    id: string;
+    createdAt: string;
+};
+
+export async function listCampLinkPasskeys():
+    Promise<RegisteredPasskey[]> {
+    const response = await apiFetch('/api/passkeys', {
+        cache: 'no-store',
+    });
+
+    if (!response.ok) {
+        throw new Error('Не удалось получить ключи доступа');
+    }
+
+    const data = await response.json() as {
+        keys: RegisteredPasskey[];
+    };
+
+    return data.keys;
+}

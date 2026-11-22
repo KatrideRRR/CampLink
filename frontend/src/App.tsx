@@ -119,6 +119,11 @@ import {
     decideIncomingNotice,
 } from './services/notification-policy';
 import { SettingsPage } from './components/SettingsPage';
+import { PasskeySetupPrompt } from './components/PasskeySetupPrompt';
+import {
+    listCampLinkPasskeys,
+    passkeysAvailable,
+} from './services/passkeys';
 import {
     createCampLinkPasskey,
     loginWithCampLinkPasskey,
@@ -325,6 +330,46 @@ function App() {
     const [settingsOpen, setSettingsOpen] =
         useState(false);
 
+    const [passkeyOfferUserId, setPasskeyOfferUserId] =
+        useState<number | null>(null);
+
+    const [passkeyOfferVisible, setPasskeyOfferVisible] =
+        useState(false);
+
+    useEffect(() => {
+        if (!me || passkeyOfferUserId !== me.id) return;
+
+        let active = true;
+
+        const dismissedKey =
+            `camplink.passkey-offer.dismissed.v1.${me.id}`;
+
+        if (localStorage.getItem(dismissedKey) === '1') {
+            return;
+        }
+
+        void Promise.all([
+            passkeysAvailable(),
+            listCampLinkPasskeys(),
+        ]).then(([available, keys]) => {
+            if (!active) return;
+
+            const isMobile =
+                Capacitor.isNativePlatform() ||
+                window.matchMedia('(pointer: coarse)').matches;
+
+            if (available && keys.length === 0 && isMobile) {
+                setPasskeyOfferVisible(true);
+            }
+        }).catch(() => {
+            // Never interrupt login because of Passkeys.
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [me?.id, passkeyOfferUserId]);
+
     const [unreadCounts, setUnreadCounts] =
         useState<Record<number, number>>({});
 
@@ -414,6 +459,8 @@ function App() {
     const lastVoiceTouchAtRef = useRef(0);
 
     const [voiceLocked, setVoiceLocked] =
+        useState(false);
+    const [voiceGestureActive, setVoiceGestureActive] =
         useState(false);
 
     const [voiceGestureHint, setVoiceGestureHint] =
@@ -1704,6 +1751,16 @@ function App() {
         const touch = event.touches[0];
         if (!touch) return;
 
+        const target = event.target;
+
+        if (
+            target instanceof Element &&
+            target.closest('button, input, a, [role="slider"]')
+        ) {
+            cancelMessageTouch();
+            return;
+        }
+
         clearMessageTimer();
         setReactionMenuMessageId(null);
 
@@ -2175,6 +2232,7 @@ function App() {
         saveOfflineUser(result.user);
         setOfflinePreview(false);
         setMe(result.user);
+        setPasskeyOfferUserId(result.user.id);
     }
 
     async function handleLogin({
@@ -2235,6 +2293,7 @@ function App() {
             saveOfflineUser(result.user);
             setOfflinePreview(false);
             setMe(result.user);
+            setPasskeyOfferUserId(result.user.id);
             return true;
         } catch {
             setError(
@@ -2319,6 +2378,8 @@ function App() {
         setConnected(false);
         setError('');
         setSettingsOpen(false);
+        setPasskeyOfferVisible(false);
+        setPasskeyOfferUserId(null);
         return true;
     }
 
@@ -2511,6 +2572,7 @@ function App() {
         voiceGestureRef.current = null;
 
         setVoiceLocked(false);
+        setVoiceGestureActive(false);
         setVoiceGestureHint('holding');
 
         cancelRecordingRef.current = cancel;
@@ -2746,6 +2808,7 @@ function App() {
         };
 
         setVoiceLocked(false);
+        setVoiceGestureActive(true);
         setVoiceGestureHint('holding');
         setMediaMenuOpen(false);
 
@@ -2842,6 +2905,7 @@ function App() {
         }
 
         voiceGestureRef.current = null;
+        setVoiceGestureActive(false);
 
         completeVoiceGesture(
             classifyVoiceGesture({
@@ -2864,6 +2928,7 @@ function App() {
             return;
         }
 
+        setVoiceGestureActive(false);
         stopVoiceRecording(true);
     }
 
@@ -3110,6 +3175,29 @@ function App() {
                 )}
             </aside>
 
+            {passkeyOfferVisible && me && (
+                <PasskeySetupPrompt
+                    onEnable={async () => {
+                        const success = await handleCreatePasskey();
+
+                        if (success) {
+                            setPasskeyOfferVisible(false);
+                            setPasskeyOfferUserId(null);
+                        }
+
+                        return success;
+                    }}
+                    onDismiss={() => {
+                        localStorage.setItem(
+                            `camplink.passkey-offer.dismissed.v1.${me.id}`,
+                            '1'
+                        );
+                        setPasskeyOfferVisible(false);
+                        setPasskeyOfferUserId(null);
+                    }}
+                />
+            )}
+
             {settingsOpen && (
                 <SettingsPage
                     displayName={me.displayName ?? me.username}
@@ -3265,7 +3353,18 @@ function App() {
                                         onTouchMove={moveMessageTouch}
                                         onTouchEnd={endMessageTouch}
                                         onTouchCancel={cancelMessageTouch}
-                                        onDoubleClick={() => {
+                                        onDoubleClick={event => {
+                                            const target = event.target;
+
+                                            if (
+                                                target instanceof Element &&
+                                                target.closest(
+                                                    'button, input, a, [role="slider"]'
+                                                )
+                                            ) {
+                                                return;
+                                            }
+
                                             if (
                                                 confirmedMessage &&
                                                 !('ontouchstart' in window)
@@ -3302,6 +3401,11 @@ function App() {
                                         {confirmedMessage?.media ? (
                                             <MediaBubble
                                                 media={confirmedMessage.media}
+                                                onReact={() =>
+                                                    setReactionMenuMessageId(
+                                                        confirmedMessage.id
+                                                    )
+                                                }
                                             />
                                         ) : (
                                             <div className="message-text">
@@ -3530,6 +3634,34 @@ function App() {
                             onPointerUp={endVoicePointer}
                             onPointerCancel={cancelVoicePointer}
                         >
+                            {voiceGestureActive &&
+                                (recordingVoice ||
+                                    voiceStartPendingRef.current) && (
+                                <div
+                                    className="voice-drag-mic"
+                                    aria-hidden="true"
+                                >
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        width="26"
+                                        height="26"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <rect
+                                            x="9"
+                                            y="2"
+                                            width="6"
+                                            height="13"
+                                            rx="3"
+                                        />
+                                        <path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8" />
+                                    </svg>
+                                </div>
+                            )}
                             <input
                                 ref={galleryInputRef}
                                 type="file"

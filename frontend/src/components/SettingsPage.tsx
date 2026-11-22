@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import {
+    listCampLinkPasskeys,
+    type RegisteredPasskey,
+} from '../services/passkeys';
 import type { ThemePreference } from '../services/theme';
 import type { PushStatus } from '../services/push-ios';
 
@@ -49,6 +53,31 @@ export function SettingsPage({
     const [passkeyState, setPasskeyState] =
         useState<'idle' | 'busy' | 'ok' | 'error'>('idle');
 
+    const [keys, setKeys] =
+        useState<RegisteredPasskey[] | null>(null);
+
+    const [keysError, setKeysError] = useState(false);
+    const [keysRevision, setKeysRevision] = useState(0);
+
+    useEffect(() => {
+        let active = true;
+
+        void listCampLinkPasskeys()
+            .then(result => {
+                if (!active) return;
+                setKeys(result);
+                setKeysError(false);
+            })
+            .catch(() => {
+                if (!active) return;
+                setKeysError(true);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [userId, keysRevision]);
+
     async function addPasskey() {
         if (passkeyState === 'busy') return;
         setPasskeyState('busy');
@@ -56,6 +85,10 @@ export function SettingsPage({
         try {
             const success = await onCreatePasskey();
             setPasskeyState(success ? 'ok' : 'error');
+
+            if (success) {
+                setKeysRevision(value => value + 1);
+            }
         } catch {
             setPasskeyState('error');
         }
@@ -171,16 +204,47 @@ export function SettingsPage({
                                 </p>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            className="settings-passkey-button"
-                            disabled={passkeyState === 'busy'}
-                            onClick={() => void addPasskey()}
-                        >
-                            {passkeyState === 'busy'
-                                ? 'Создаём ключ…'
-                                : 'Добавить ключ доступа'}
-                        </button>
+                        {keysError ? (
+                            <button
+                                type="button"
+                                className="settings-passkey-button"
+                                onClick={() => {
+                                    setKeysError(false);
+                                    setKeys(null);
+                                    setKeysRevision(value => value + 1);
+                                }}
+                            >
+                                Повторить проверку ключей
+                            </button>
+                        ) : keys === null ? (
+                            <p className="settings-key-status">
+                                Проверяем ключи доступа…
+                            </p>
+                        ) : (
+                            <>
+                                <p
+                                    className="settings-key-status"
+                                    role="status"
+                                >
+                                    {keys.length > 0
+                                        ? `Ключи доступа подключены: ${keys.length}`
+                                        : 'Ключи доступа пока не добавлены'}
+                                </p>
+
+                                <button
+                                    type="button"
+                                    className="settings-passkey-button"
+                                    disabled={passkeyState === 'busy'}
+                                    onClick={() => void addPasskey()}
+                                >
+                                    {passkeyState === 'busy'
+                                        ? 'Создаём ключ…'
+                                        : keys.length > 0
+                                            ? 'Добавить ещё один ключ'
+                                            : 'Включить быстрый вход'}
+                                </button>
+                            </>
+                        )}
                         {passkeyState === 'ok' && (
                             <p role="status" className="settings-passkey-ok">
                                 Ключ доступа сохранён

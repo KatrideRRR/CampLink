@@ -7,9 +7,13 @@ import type {
 
 type Props = {
     media: MessageMedia;
+    onReact?: () => void;
 };
 
-export function MediaBubble({ media }: Props) {
+export function MediaBubble({
+    media,
+    onReact,
+}: Props) {
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState(false);
     const [expanded, setExpanded] = useState(false);
@@ -102,7 +106,7 @@ export function MediaBubble({ media }: Props) {
     }
 
     if (media.kind === 'voice') {
-        return <VoiceMessagePlayer url={url} />;
+        return <VoiceMessagePlayer url={url} onReact={onReact} />;
     }
 
     return (

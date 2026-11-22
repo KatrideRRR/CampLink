@@ -3,9 +3,13 @@ import { formatVoiceTime } from '../services/voice-visualization';
 
 type Props = {
     url: string;
+    onReact?: () => void;
 };
 
-export function VoiceMessagePlayer({ url }: Props) {
+export function VoiceMessagePlayer({
+    url,
+    onReact,
+}: Props) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const [playing, setPlaying] = useState(false);
     const [position, setPosition] = useState(0);
@@ -41,10 +45,6 @@ export function VoiceMessagePlayer({ url }: Props) {
         <div
             className="voice-player"
             aria-label="Голосовое сообщение"
-            onTouchStart={event => event.stopPropagation()}
-            onTouchMove={event => event.stopPropagation()}
-            onTouchEnd={event => event.stopPropagation()}
-            onDoubleClick={event => event.stopPropagation()}
         >
             <audio
                 ref={audioRef}
@@ -128,6 +128,35 @@ export function VoiceMessagePlayer({ url }: Props) {
                         : `${formatVoiceTime(position)} / ${formatVoiceTime(duration)}`}
                 </span>
             </div>
+
+            {onReact && (
+                <button
+                    type="button"
+                    className="voice-player-react"
+                    aria-label="Добавить реакцию на голосовое"
+                    title="Реакция"
+                    onClick={event => {
+                        event.stopPropagation();
+                        onReact();
+                    }}
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M8 14c2.2 2.7 5.8 2.7 8 0" />
+                        <path d="M9 9h.01M15 9h.01" />
+                    </svg>
+                </button>
+            )}
         </div>
     );
 }
