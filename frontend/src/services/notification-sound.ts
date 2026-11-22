@@ -39,7 +39,6 @@ export async function unlockNotificationSound(): Promise<void> {
 }
 
 export function playNotificationSound(): void {
-    if (!readNotificationSoundEnabled()) return;
     if (!audioContext || audioContext.state !== 'running') {
         return;
     }

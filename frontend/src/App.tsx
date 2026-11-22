@@ -100,14 +100,13 @@ import {
     type RegistrationPayload,
 } from './components/RegistrationForm';
 import {
-    readNotificationSoundEnabled,
-    saveNotificationSoundEnabled,
     unlockNotificationSound,
     playNotificationSound,
 } from './services/notification-sound';
 import {
     decideIncomingNotice,
 } from './services/notification-policy';
+import { SettingsPage } from './components/SettingsPage';
 import './App.css';
 
 type User = {
@@ -309,6 +308,8 @@ function App() {
 
     const [contactSearchOpen, setContactSearchOpen] =
         useState(false);
+    const [settingsOpen, setSettingsOpen] =
+        useState(false);
 
     const [unreadCounts, setUnreadCounts] =
         useState<Record<number, number>>({});
@@ -486,9 +487,6 @@ function App() {
             peerId: number;
             text: string;
         } | null>(null);
-
-    const [soundEnabled, setSoundEnabled] =
-        useState(readNotificationSoundEnabled);
 
     useEffect(() => {
         if (!me) return;
@@ -2115,13 +2113,13 @@ function App() {
         }
     }
 
-    async function handleLogout() {
+    async function handleLogout(): Promise<boolean> {
         try {
             await apiPost('/api/auth/logout', {});
             await clearNativeSession();
         } catch {
             setError('Не удалось завершить сессию');
-            return;
+            return false;
         }
         if (me) {
             clearOfflineCache(me.id);
@@ -2152,6 +2150,8 @@ function App() {
         setMessages([]);
         setConnected(false);
         setError('');
+        setSettingsOpen(false);
+        return true;
     }
 
 
@@ -2633,56 +2633,67 @@ function App() {
 
             <aside className="sidebar">
                 <div className="sidebar-header">
-                    <div className="brand">
-                        <div className="brand-icon">C</div>
-                        <strong>CampLink</strong>
+                    <div className="profile-summary">
+                        <div
+                            className="avatar profile-avatar"
+                            title={connected ? 'В сети' : 'Не в сети'}
+                        >
+                            {(me.displayName ?? me.username)
+                                .trim().charAt(0).toUpperCase() || '?'}
+                            <span
+                                className={`profile-online ${
+                                    connected ? 'is-online' : ''
+                                }`}
+                            />
+                        </div>
+                        <div className="account-identity">
+                            <strong className="account-name">
+                                {me.displayName ?? me.username}
+                            </strong>
+                            <span className="account-user-id">
+                                ID: {me.id}
+                            </span>
+                        </div>
                     </div>
 
-
                     <div className="sidebar-actions">
-                        <div
-                            className={`connection-indicator ${
-                                connected ? 'is-online' : ''
-                            }`}
-                            title={
-                                connected
-                                    ? 'Соединение установлено'
-                                    : 'Соединение отсутствует'
-                            }
-                        />
-
                         <button
                             type="button"
-                            className="theme-button sound-toggle"
-                            title={
-                                soundEnabled
-                                    ? 'Выключить звук сообщений'
-                                    : 'Включить звук сообщений'
-                            }
-                            aria-label={
-                                soundEnabled
-                                    ? 'Выключить звук сообщений'
-                                    : 'Включить звук сообщений'
-                            }
-                            aria-pressed={soundEnabled}
+                            className="header-icon-button header-add"
+                            aria-label="Новый чат"
+                            title="Новый чат"
                             onClick={() => {
-                                const next = !soundEnabled;
-
-                                setSoundEnabled(next);
-                                saveNotificationSoundEnabled(next);
-
-                                void unlockNotificationSound()
-                                    .then(() => {
-                                        if (next) {
-                                            playNotificationSound();
-                                        }
-                                    });
+                                setSettingsOpen(false);
+                                setContactSearchOpen(true);
                             }}
                         >
                             <svg
-                                width="20"
-                                height="20"
                                 viewBox="0 0 24 24"
+                                width="23"
+                                height="23"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            className="header-icon-button"
+                            aria-label="Открыть настройки"
+                            title="Настройки"
+                            onClick={() => {
+                                setContactSearchOpen(false);
+                                setSettingsOpen(true);
+                            }}
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                width="22"
+                                height="22"
                                 fill="none"
                                 stroke="currentColor"
                                 strokeWidth="1.8"
@@ -2690,81 +2701,16 @@ function App() {
                                 strokeLinejoin="round"
                                 aria-hidden="true"
                             >
-                                <path d="M11 5 6 9H3v6h3l5 4V5Z" />
-                                {soundEnabled ? (
-                                    <>
-                                        <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-                                        <path d="M18 5a9 9 0 0 1 0 14" />
-                                    </>
-                                ) : (
-                                    <path d="m16 9 5 6m0-6-5 6" />
-                                )}
+                                <path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
+                                <circle cx="12" cy="12" r="5" />
+                                <circle cx="12" cy="12" r="2" />
                             </svg>
                         </button>
-
-                        <button
-                            type="button"
-                            className="theme-button"
-                            onClick={cycleTheme}
-                            title={`Тема: ${themeLabel}`}
-                            aria-label={`Переключить тему. Сейчас: ${themeLabel}`}
-                        >
-                            ◐
-                        </button>
                     </div>
-
                 </div>
 
-                <div className="account">
-                    <div className="account-identity">
-                        <span className="account-name">
-                            {me.displayName ?? me.username}
-                        </span>
-                        <span className="account-user-id">
-                            ID: {me.id}
-                        </span>
-                    </div>
-
-                    {isNativeIos && pushStatus !== 'registered' && (
-                        <button
-                            type="button"
-                            className="text-button"
-                            onClick={() => void enableIosPush()}
-                            disabled={pushStatus === 'requesting'}
-                        >
-                            {pushStatus === 'requesting'
-                                    ? 'Подключаем…'
-                                    : pushStatus === 'denied'
-                                        ? 'Push запрещён'
-                                        : pushStatus === 'error'
-                                            ? 'Ошибка Push'
-                                            : 'Включить Push'}
-                        </button>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="text-button"
-                    >
-                        Выйти
-                    </button>
-                </div>
-
-                <div className="section-heading-row">
-                    <div className="section-heading">
-                        Сообщения
-                    </div>
-                    <button
-                        type="button"
-                        className="new-chat-button"
-                        onClick={() =>
-                            setContactSearchOpen(true)
-                        }
-                        aria-expanded={contactSearchOpen}
-                    >
-                        + Новый чат
-                    </button>
+                <div className="section-heading">
+                    Сообщения
                 </div>
 
                 <nav className="contact-list">
@@ -2820,10 +2766,27 @@ function App() {
 
                 {peers.length === 0 && (
                     <p className="empty-contacts">
-                        Пока нет переписок. Нажмите «Новый чат».
+                        Пока нет переписок. Нажмите «+» вверху.
                     </p>
                 )}
             </aside>
+
+            {settingsOpen && (
+                <SettingsPage
+                    displayName={me.displayName ?? me.username}
+                    userId={me.id}
+                    themePreference={themePreference}
+                    onThemeChange={value => {
+                        saveThemePreference(value);
+                        setThemePreference(value);
+                    }}
+                    nativeIos={isNativeIos}
+                    pushStatus={pushStatus}
+                    onEnablePush={() => void enableIosPush()}
+                    onBack={() => setSettingsOpen(false)}
+                    onLogout={handleLogout}
+                />
+            )}
 
             {contactSearchOpen && (
                 <NewChatDialog
@@ -2858,7 +2821,19 @@ function App() {
                                 onClick={returnToChats}
                                 aria-label="Вернуться к списку чатов"
                             >
-                                ‹ <span>Чаты</span>
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    width="25"
+                                    height="25"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                >
+                                    <path d="m15 18-6-6 6-6" />
+                                </svg>
                             </button>
                             <div className="avatar">
                                 {(selectedPeer.displayName ?? selectedPeer.username)[0].toUpperCase()}

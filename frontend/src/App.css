@@ -2044,3 +2044,333 @@ body {
 :root[data-theme='light'] .new-chat-user-id {
     color: #66707e;
 }
+
+/* Build 4: compact profile header and settings screen */
+
+.sidebar-header .profile-summary {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-width: 0;
+    gap: 11px;
+}
+
+.profile-avatar {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #b9d4ff, #e8ff72);
+    font-size: 18px;
+}
+
+.profile-online {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 11px;
+    height: 11px;
+    border: 2px solid #181a1f;
+    border-radius: 50%;
+    background: #818792;
+}
+
+.profile-online.is-online {
+    background: #65d889;
+}
+
+.sidebar-header .account-identity {
+    min-width: 0;
+    gap: 5px;
+}
+
+.sidebar-header .account-name {
+    font-size: 15px;
+    line-height: 1.2;
+}
+
+.sidebar-header .sidebar-actions {
+    flex-shrink: 0;
+    gap: 6px;
+}
+
+.header-icon-button {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    color: inherit;
+}
+
+.header-icon-button:hover,
+.header-icon-button:focus-visible {
+    background: rgba(128, 128, 128, .15);
+}
+
+.header-add {
+    color: #e8ff72;
+}
+
+:root[data-theme='light'] .header-add {
+    color: #617b0f;
+}
+
+:root[data-theme='light'] .profile-online {
+    border-color: #f9fafc;
+}
+
+.messenger.is-mobile .sidebar-header {
+    padding: 10px 12px 10px 16px;
+}
+
+.messenger.is-mobile .mobile-back {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+}
+
+.messenger.is-mobile .mobile-back:active {
+    background: rgba(128, 128, 128, .14);
+}
+
+.settings-screen {
+    position: fixed;
+    z-index: 8000;
+    inset: 0;
+    top: var(--camplink-viewport-top, 0px);
+    height: var(--camplink-viewport-height, 100dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: #111317;
+    color: #f5f5f7;
+    padding: max(20px, env(safe-area-inset-top, 0px)) 16px
+             max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+:root.camplink-native-ios .settings-screen {
+    padding-top: max(66px, env(safe-area-inset-top, 0px));
+}
+
+.settings-content {
+    width: min(100%, 540px);
+    margin: 0 auto;
+    padding-bottom: 24px;
+}
+
+.settings-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.settings-topbar h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 750;
+}
+
+.settings-back {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(128,128,128,.12);
+    color: inherit;
+}
+
+.settings-profile {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 28px;
+}
+
+.settings-avatar {
+    width: 62px;
+    height: 62px;
+    font-size: 25px;
+    background: linear-gradient(135deg, #b9d4ff, #e8ff72);
+}
+
+.settings-profile-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.settings-profile-text strong {
+    font-size: 19px;
+    overflow-wrap: anywhere;
+}
+
+.settings-profile-text span {
+    font-size: 13px;
+    color: #a3a9b3;
+}
+
+.settings-group {
+    margin-bottom: 24px;
+}
+
+.settings-group h2 {
+    margin: 0 0 10px 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #a9afb8;
+    letter-spacing: .4px;
+}
+
+.settings-card {
+    padding: 16px;
+    border: 1px solid #383d46;
+    border-radius: 17px;
+    background: #1d2026;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.settings-row strong {
+    font-size: 14px;
+}
+
+.settings-row p {
+    margin: 6px 0 0;
+    color: #a3a9b3;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.settings-separator {
+    height: 1px;
+    background: #363b43;
+    margin: 16px 0;
+}
+
+.settings-theme-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.settings-theme-options button {
+    min-height: 44px;
+    border: 1px solid #414751;
+    border-radius: 11px;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.settings-theme-options button.selected {
+    background: #e8ff72;
+    color: #161a1e;
+    border-color: #e8ff72;
+}
+
+.settings-push-button {
+    flex-shrink: 0;
+    border: 1px solid #596a40;
+    border-radius: 10px;
+    min-height: 38px;
+    padding: 0 12px;
+    background: #344125;
+    color: #e8ff72;
+    font-size: 12px;
+}
+
+.settings-logout {
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid #634448;
+    border-radius: 14px;
+    background: #292126;
+    color: #ffb4b8;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.settings-error {
+    color: #ffb4b8;
+    font-size: 13px;
+    text-align: center;
+}
+
+:root[data-theme='light'] .settings-screen {
+    background: #f6f7fb;
+    color: #181b20;
+}
+
+:root[data-theme='light'] .settings-card {
+    background: #fff;
+    border-color: #e0e4eb;
+}
+
+:root[data-theme='light'] .settings-row p,
+:root[data-theme='light'] .settings-profile-text span,
+:root[data-theme='light'] .settings-group h2 {
+    color: #66707d;
+}
+
+:root[data-theme='light'] .settings-separator {
+    background: #e0e4eb;
+}
+
+:root[data-theme='light'] .settings-theme-options button {
+    border-color: #d1d7e0;
+}
+
+:root[data-theme='light'] .settings-theme-options button.selected {
+    border-color: #dceba2;
+    background: #e7f6b2;
+    color: #25320a;
+}
+
+:root[data-theme='light'] .settings-push-button {
+    background: #edf4dc;
+    color: #4c6610;
+    border-color: #d6e3b9;
+}
+
+:root[data-theme='light'] .settings-logout {
+    background: #fff5f5;
+    color: #aa293e;
+    border-color: #f0d0d4;
+}
+
+@media (max-width: 380px) {
+    .sidebar-header .account-name {
+        font-size: 14px;
+    }
+    .sidebar-header .sidebar-actions {
+        gap: 2px;
+    }
+    .header-icon-button {
+        width: 40px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-screen,
+    .header-icon-button {
+        animation: none;
+        transition: none;
+    }
+}
