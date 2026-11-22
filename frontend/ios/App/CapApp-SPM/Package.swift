@@ -17,7 +17,8 @@ let package = Package(
         .package(name: "CapacitorApp", path: "../../../../node_modules/@capacitor/app"),
         .package(name: "CapacitorKeyboard", path: "../../../../node_modules/@capacitor/keyboard"),
         .package(name: "CapacitorNetwork", path: "../../../../node_modules/@capacitor/network"),
-        .package(name: "CapacitorPreferences", path: "../../../../node_modules/@capacitor/preferences")
+        .package(name: "CapacitorPreferences", path: "../../../../node_modules/@capacitor/preferences"),
+        .package(name: "CapawesomeCapacitorPasskeys", path: "../../../../node_modules/@capawesome/capacitor-passkeys")
     ],
     targets: [
         .target(
@@ -30,7 +31,8 @@ let package = Package(
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
                 .product(name: "CapacitorKeyboard", package: "CapacitorKeyboard"),
                 .product(name: "CapacitorNetwork", package: "CapacitorNetwork"),
-                .product(name: "CapacitorPreferences", package: "CapacitorPreferences")
+                .product(name: "CapacitorPreferences", package: "CapacitorPreferences"),
+                .product(name: "CapawesomeCapacitorPasskeys", package: "CapawesomeCapacitorPasskeys")
             ]
         )
     ]
