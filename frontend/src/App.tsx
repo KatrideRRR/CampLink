@@ -6,6 +6,7 @@ import {
     useState,
     type FormEvent,
     type TouchEvent as ReactTouchEvent,
+    type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
@@ -86,6 +87,12 @@ import {
 } from './services/unread-chats';
 import { MediaBubble } from './components/MediaBubble';
 import { VoiceRecordingBar } from './components/VoiceRecordingBar';
+import {
+    classifyVoiceGesture,
+    previewVoiceGesture,
+    type VoiceGestureAction,
+    type VoiceGestureHint,
+} from './services/voice-gesture';
 import {
     readChatList,
     saveChatList,
@@ -384,6 +391,27 @@ function App() {
         useRef<number | null>(null);
 
     const cancelRecordingRef = useRef(false);
+
+    const voiceStartPendingRef = useRef(false);
+    const voiceStartGenerationRef = useRef(0);
+
+    const voiceDeferredActionRef =
+        useRef<VoiceGestureAction | null>(null);
+
+    const voiceGestureRef = useRef<{
+        pointerId: number;
+        startX: number;
+        startY: number;
+        startedAt: number;
+    } | null>(null);
+
+    const lastVoiceTouchAtRef = useRef(0);
+
+    const [voiceLocked, setVoiceLocked] =
+        useState(false);
+
+    const [voiceGestureHint, setVoiceGestureHint] =
+        useState<VoiceGestureHint>('holding');
 
     const [recordingVoice, setRecordingVoice] =
         useState(false);
@@ -1769,7 +1797,9 @@ function App() {
     function returnToChats() {
         setMediaMenuOpen(false);
         setNewMessageAtBottom(null);
-        if (recordingVoice) stopVoiceRecording(true);
+        if (recordingVoice || voiceStartPendingRef.current) {
+            stopVoiceRecording(true);
+        }
         cancelMessageTouch();
         setReactionMenuMessageId(null);
         setReplyTo(null);
@@ -1938,7 +1968,7 @@ function App() {
         setMediaMenuOpen(false);
         setNewMessageAtBottom(null);
         if (
-            recordingVoice &&
+            (recordingVoice || voiceStartPendingRef.current) &&
             selectedPeerRef.current !== id
         ) {
             stopVoiceRecording(true);
@@ -2338,6 +2368,14 @@ function App() {
     function stopVoiceRecording(cancel = false) {
         const recorder = voiceRecorderRef.current;
 
+        // Invalidate an unfinished microphone permission request.
+        voiceStartGenerationRef.current += 1;
+        voiceDeferredActionRef.current = null;
+        voiceGestureRef.current = null;
+
+        setVoiceLocked(false);
+        setVoiceGestureHint('holding');
+
         cancelRecordingRef.current = cancel;
 
         if (voiceTimerRef.current !== null) {
@@ -2357,13 +2395,17 @@ function App() {
         setRecordingVoice(false);
     }
 
-    async function toggleVoiceRecording() {
-        if (recordingVoice) {
-            stopVoiceRecording();
-            return;
-        }
+    function takeDeferredVoiceAction(): VoiceGestureAction | null {
+        const action = voiceDeferredActionRef.current;
+        voiceDeferredActionRef.current = null;
+        return action;
+    }
 
-        if (voiceRecorderRef.current) {
+    async function startVoiceRecording() {
+        if (
+            voiceRecorderRef.current ||
+            voiceStartPendingRef.current
+        ) {
             setError('Предыдущая запись ещё завершается.');
             return;
         }
@@ -2394,12 +2436,32 @@ function App() {
             return;
         }
 
+        const generation =
+            ++voiceStartGenerationRef.current;
+
+        voiceStartPendingRef.current = true;
+        voiceDeferredActionRef.current = null;
+
         let stream: MediaStream | null = null;
 
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: true,
             });
+
+            if (
+                generation !== voiceStartGenerationRef.current ||
+                document.visibilityState === 'hidden'
+            ) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+            }
+
+            if (voiceDeferredActionRef.current === 'cancel') {
+                stream.getTracks().forEach(track => track.stop());
+                voiceDeferredActionRef.current = null;
+                return;
+            }
 
             const choices = [
                 'audio/mp4',
@@ -2483,16 +2545,167 @@ function App() {
                 () => stopVoiceRecording(),
                 90000
             );
+
+            const deferred = takeDeferredVoiceAction();
+
+            if (deferred === 'send') {
+                stopVoiceRecording(false);
+            } else if (deferred === 'cancel') {
+                stopVoiceRecording(true);
+            } else if (
+                deferred === 'keep' ||
+                deferred === 'lock'
+            ) {
+                setVoiceLocked(true);
+            }
         } catch {
             stream?.getTracks().forEach(
                 track => track.stop()
             );
 
-            setError(
-                'Не удалось начать запись. ' +
-                'Проверьте доступ к микрофону.'
-            );
+            if (
+                generation === voiceStartGenerationRef.current
+            ) {
+                voiceRecorderRef.current = null;
+                voiceStreamRef.current = null;
+                setRecordingVoice(false);
+                setError(
+                    'Не удалось начать запись. ' +
+                    'Проверьте доступ к микрофону.'
+                );
+            }
+        } finally {
+            voiceStartPendingRef.current = false;
+
+            if (!voiceRecorderRef.current) {
+                voiceDeferredActionRef.current = null;
+            }
         }
+    }
+
+    function beginVoicePointer(
+        event: ReactPointerEvent<HTMLButtonElement>
+    ) {
+        if (event.pointerType === 'mouse' || !event.isPrimary) {
+            return;
+        }
+
+        if (
+            voiceRecorderRef.current ||
+            voiceStartPendingRef.current
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+
+        lastVoiceTouchAtRef.current = Date.now();
+
+        voiceGestureRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startedAt: performance.now(),
+        };
+
+        setVoiceLocked(false);
+        setVoiceGestureHint('holding');
+        setMediaMenuOpen(false);
+
+        // Capture on the stable form, not the microphone button:
+        // the microphone disappears when recording starts.
+        try {
+            event.currentTarget
+                .closest('form')
+                ?.setPointerCapture(event.pointerId);
+        } catch {
+            // Unsupported capture: desktop tap still works.
+        }
+
+        void startVoiceRecording();
+    }
+
+    function moveVoicePointer(
+        event: ReactPointerEvent<HTMLFormElement>
+    ) {
+        const gesture = voiceGestureRef.current;
+
+        if (!gesture || gesture.pointerId !== event.pointerId) {
+            return;
+        }
+
+        setVoiceGestureHint(
+            previewVoiceGesture({
+                startX: gesture.startX,
+                startY: gesture.startY,
+                currentX: event.clientX,
+                currentY: event.clientY,
+            })
+        );
+    }
+
+    function completeVoiceGesture(
+        action: VoiceGestureAction
+    ) {
+        if (
+            !voiceRecorderRef.current &&
+            !voiceStartPendingRef.current
+        ) {
+            return;
+        }
+
+        if (action === 'keep' || action === 'lock') {
+            setVoiceLocked(true);
+            setVoiceGestureHint('holding');
+
+            if (voiceStartPendingRef.current) {
+                voiceDeferredActionRef.current = action;
+            }
+
+            return;
+        }
+
+        if (voiceRecorderRef.current) {
+            stopVoiceRecording(action === 'cancel');
+        } else {
+            // Permission may still be open on the device.
+            voiceDeferredActionRef.current = action;
+        }
+    }
+
+    function endVoicePointer(
+        event: ReactPointerEvent<HTMLFormElement>
+    ) {
+        const gesture = voiceGestureRef.current;
+
+        if (!gesture || gesture.pointerId !== event.pointerId) {
+            return;
+        }
+
+        voiceGestureRef.current = null;
+
+        completeVoiceGesture(
+            classifyVoiceGesture({
+                startX: gesture.startX,
+                startY: gesture.startY,
+                currentX: event.clientX,
+                currentY: event.clientY,
+                elapsedMs:
+                    performance.now() - gesture.startedAt,
+            })
+        );
+    }
+
+    function cancelVoicePointer(
+        event: ReactPointerEvent<HTMLFormElement>
+    ) {
+        const gesture = voiceGestureRef.current;
+
+        if (!gesture || gesture.pointerId !== event.pointerId) {
+            return;
+        }
+
+        stopVoiceRecording(true);
     }
 
     function handleSend(event: FormEvent) {
@@ -3185,6 +3398,9 @@ function App() {
                                     : 'composer'
                             }
                             onSubmit={handleSend}
+                            onPointerMove={moveVoicePointer}
+                            onPointerUp={endVoicePointer}
+                            onPointerCancel={cancelVoicePointer}
                         >
                             <input
                                 ref={galleryInputRef}
@@ -3306,6 +3522,15 @@ function App() {
                             {recordingVoice && voiceStreamRef.current ? (
                                 <VoiceRecordingBar
                                     stream={voiceStreamRef.current}
+                                    hint={
+                                        voiceLocked
+                                            ? 'Запись закреплена'
+                                            : voiceGestureHint === 'lock'
+                                                ? '↑ Отпустите для фиксации'
+                                                : voiceGestureHint === 'cancel'
+                                                    ? '← Отпустите для отмены'
+                                                    : '↑ Закрепить · ← Отменить'
+                                    }
                                 />
                             ) : (
                                 <textarea
@@ -3405,12 +3630,28 @@ function App() {
                                     type="button"
                                     className="composer-main-action"
                                     aria-label="Записать голосовое сообщение"
+                                    title="Нажмите или удерживайте для записи"
                                     disabled={
                                         !connected || uploadingMedia
                                     }
-                                    onClick={() => {
+                                    onPointerDown={beginVoicePointer}
+                                    onContextMenu={event =>
+                                        event.preventDefault()
+                                    }
+                                    onClick={event => {
+                                        // Ignore the synthetic click following
+                                        // a touch/pencil gesture.
+                                        if (
+                                            event.detail > 0 &&
+                                            Date.now() -
+                                                lastVoiceTouchAtRef.current <
+                                                1000
+                                        ) {
+                                            return;
+                                        }
+
                                         setMediaMenuOpen(false);
-                                        void toggleVoiceRecording();
+                                        void startVoiceRecording();
                                     }}
                                 >
                                     <svg

@@ -6,9 +6,13 @@ import {
 
 type Props = {
     stream: MediaStream;
+    hint: string;
 };
 
-export function VoiceRecordingBar({ stream }: Props) {
+export function VoiceRecordingBar({
+    stream,
+    hint,
+}: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [seconds, setSeconds] = useState(0);
 
@@ -149,7 +153,7 @@ export function VoiceRecordingBar({ stream }: Props) {
                     aria-hidden="true"
                 />
                 <span className="voice-record-caption">
-                    <span>Запись</span>
+                    <span>{hint}</span>
                     <time>{formatVoiceTime(seconds)}</time>
                 </span>
             </div>
