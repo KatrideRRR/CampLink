@@ -115,7 +115,9 @@ test('native iOS notification sound is bundled', () => {
     assert.equal(sound.toString('ascii', 8, 12), 'WAVE');
     assert.equal(sound.readUInt16LE(20), 1);
     assert.equal(sound.readUInt16LE(22), 1);
-    assert.equal(sound.readUInt32LE(24), 44100);
+    // CampLink's updated notification sound is 22.05 kHz.
+    assert.equal(sound.readUInt32LE(24), 22050);
+    assert.equal(sound.readUInt16LE(34), 16);
 
     const project = readFileSync(
         new URL(
@@ -141,5 +143,12 @@ test('native iOS notification sound is bundled', () => {
     );
 
     // Apple's notification sound limit is 30 seconds.
-    assert.ok(sound.length < 44100 * 2 * 30 + 44);
+    const sampleRate = sound.readUInt32LE(24);
+    const channels = sound.readUInt16LE(22);
+    const bitsPerSample = sound.readUInt16LE(34);
+
+    const bytesPerSecond =
+        sampleRate * channels * bitsPerSample / 8;
+
+    assert.ok(sound.length < bytesPerSecond * 30 + 44);
 });

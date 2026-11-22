@@ -55,8 +55,10 @@ export function playNotificationSound(): void {
         const now = audioContext.currentTime + 0.01;
 
         const tones = [
-            { frequency: 784, start: 0, duration: 0.13 },
-            { frequency: 988, start: 0.14, duration: 0.17 },
+            { frequency: 880, start: 0, duration: 0.27 },
+            { frequency: 1175, start: 0.33, duration: 0.28 },
+            { frequency: 988, start: 0.71, duration: 0.30 },
+            { frequency: 1318, start: 1.08, duration: 0.33 },
         ];
 
         for (const tone of tones) {
@@ -66,7 +68,7 @@ export function playNotificationSound(): void {
             const oscillator = audioContext.createOscillator();
             const volume = audioContext.createGain();
 
-            oscillator.type = 'sine';
+            oscillator.type = 'triangle';
             oscillator.frequency.setValueAtTime(
                 tone.frequency,
                 start
@@ -74,8 +76,8 @@ export function playNotificationSound(): void {
 
             volume.gain.setValueAtTime(0.0001, start);
             volume.gain.exponentialRampToValueAtTime(
-                0.018,
-                start + 0.025
+                0.65,
+                start + 0.012
             );
             volume.gain.exponentialRampToValueAtTime(
                 0.0001,
