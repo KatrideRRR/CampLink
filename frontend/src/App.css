@@ -2611,6 +2611,11 @@ body {
     height: var(--camplink-viewport-height, 100dvh);
     min-height: 0;
     box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .78);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
 
     padding:
         max(12px, env(safe-area-inset-top, 0px))
@@ -2693,7 +2698,7 @@ body {
 
 @media (max-width: 520px) {
     .new-chat-overlay {
-        align-items: flex-start;
+        align-items: center;
         justify-content: center;
     }
 
@@ -2718,7 +2723,7 @@ body {
 
 @media (max-height: 480px) {
     .new-chat-overlay {
-        align-items: flex-start;
+        align-items: center;
     }
 
     .new-chat-dialog {
