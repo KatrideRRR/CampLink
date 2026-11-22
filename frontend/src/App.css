@@ -3451,3 +3451,51 @@ body {
 .settings-push-report {
     color: #4a5d45;
 }
+
+/* Build 4: swipe-back navigation for Settings */
+
+.messenger.is-mobile .settings-screen {
+    touch-action: pan-y;
+    will-change: transform;
+    box-shadow: -12px 0 28px rgba(0, 0, 0, .17);
+    animation:
+        camplink-settings-enter
+        320ms cubic-bezier(.22, 1, .36, 1) both;
+    transition:
+        transform 320ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.messenger.is-mobile .settings-screen.is-settings-swiping {
+    animation: none;
+    transition: none;
+    transform: translate3d(
+        var(--camplink-settings-swipe-x, 0px),
+        0,
+        0
+    );
+}
+
+.messenger.is-mobile .settings-screen.is-settings-closing {
+    animation: none;
+    transform: translate3d(100%, 0, 0);
+    pointer-events: none;
+}
+
+@keyframes camplink-settings-enter {
+    from {
+        transform: translate3d(100%, 0, 0);
+    }
+    to {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .messenger.is-mobile .settings-screen,
+    .messenger.is-mobile .settings-screen.is-settings-swiping,
+    .messenger.is-mobile .settings-screen.is-settings-closing {
+        animation: none;
+        transition: none;
+        will-change: auto;
+    }
+}

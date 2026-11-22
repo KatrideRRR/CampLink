@@ -1,4 +1,12 @@
-import { useEffect, useState } from 'react';
+import {
+    useEffect,
+    useRef,
+    useState,
+    type TouchEvent as ReactTouchEvent,
+} from 'react';
+import {
+    isBackSwipe,
+} from '../services/message-interactions';
 import {
     listCampLinkPasskeys,
     type RegisteredPasskey,
@@ -64,6 +72,147 @@ export function SettingsPage({
 }: Props) {
     const [busy, setBusy] = useState(false);
     const [logoutError, setLogoutError] = useState(false);
+
+    const [settingsClosing, setSettingsClosing] = useState(false);
+
+    const settingsSwipeRef = useRef<{
+        x: number;
+        y: number;
+        dragging: boolean;
+    } | null>(null);
+
+    const settingsCloseTimerRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (settingsCloseTimerRef.current !== null) {
+                window.clearTimeout(settingsCloseTimerRef.current);
+            }
+        };
+    }, []);
+
+    function closeSettings() {
+        if (settingsClosing || settingsCloseTimerRef.current !== null) {
+            return;
+        }
+
+        const mobile = nativeIos ||
+            window.matchMedia('(max-width: 900px)').matches;
+
+        const reducedMotion = window.matchMedia(
+            '(prefers-reduced-motion: reduce)'
+        ).matches;
+
+        if (!mobile || reducedMotion) {
+            onBack();
+            return;
+        }
+
+        setSettingsClosing(true);
+
+        settingsCloseTimerRef.current = window.setTimeout(() => {
+            settingsCloseTimerRef.current = null;
+            onBack();
+        }, 320);
+    }
+
+    function resetSettingsSwipe(panel: HTMLElement) {
+        panel.classList.remove('is-settings-swiping');
+        panel.style.removeProperty(
+            '--camplink-settings-swipe-x'
+        );
+    }
+
+    function beginSettingsSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        const mobile = nativeIos ||
+            window.matchMedia('(max-width: 900px)').matches;
+
+        if (!mobile || settingsClosing) return;
+
+        const touch = event.touches[0];
+
+        settingsSwipeRef.current =
+            touch && event.touches.length === 1 &&
+            touch.clientX <= 30
+                ? {
+                    x: touch.clientX,
+                    y: touch.clientY,
+                    dragging: false,
+                }
+                : null;
+    }
+
+    function moveSettingsSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        const start = settingsSwipeRef.current;
+        const touch = event.touches[0];
+
+        if (!start || !touch) return;
+
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+
+        if (
+            !start.dragging &&
+            Math.abs(dy) > 20 &&
+            Math.abs(dy) > Math.abs(dx)
+        ) {
+            settingsSwipeRef.current = null;
+            resetSettingsSwipe(event.currentTarget);
+            return;
+        }
+
+        if (dx <= 8 || Math.abs(dy) > 45) return;
+
+        start.dragging = true;
+
+        const offset = Math.min(
+            event.currentTarget.clientWidth,
+            Math.max(0, dx)
+        );
+
+        event.currentTarget.style.setProperty(
+            '--camplink-settings-swipe-x',
+            `${offset}px`
+        );
+
+        event.currentTarget.classList.add(
+            'is-settings-swiping'
+        );
+    }
+
+    function endSettingsSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        const start = settingsSwipeRef.current;
+        settingsSwipeRef.current = null;
+
+        const touch = event.changedTouches[0];
+
+        if (!start || !touch) {
+            resetSettingsSwipe(event.currentTarget);
+            return;
+        }
+
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+
+        resetSettingsSwipe(event.currentTarget);
+
+        if (isBackSwipe(start.x, dx, dy)) {
+            closeSettings();
+        }
+    }
+
+    function cancelSettingsSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        settingsSwipeRef.current = null;
+        resetSettingsSwipe(event.currentTarget);
+    }
     const [pushChecking, setPushChecking] = useState(false);
     const [pushTesting, setPushTesting] = useState(false);
     const [pushReport, setPushReport] =
@@ -173,17 +322,25 @@ export function SettingsPage({
 
     return (
         <section
-            className="settings-screen"
+            className={
+                settingsClosing
+                    ? 'settings-screen is-settings-closing'
+                    : 'settings-screen'
+            }
             role="dialog"
             aria-modal="true"
             aria-label="Настройки"
+            onTouchStartCapture={beginSettingsSwipe}
+            onTouchMoveCapture={moveSettingsSwipe}
+            onTouchEndCapture={endSettingsSwipe}
+            onTouchCancelCapture={cancelSettingsSwipe}
         >
             <div className="settings-content">
                 <header className="settings-topbar">
                     <button
                         className="settings-back"
                         type="button"
-                        onClick={onBack}
+                        onClick={closeSettings}
                         aria-label="Закрыть настройки"
                     >
                         <svg
