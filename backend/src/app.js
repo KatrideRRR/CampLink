@@ -588,6 +588,111 @@ export function createAppServer(options = {}) {
         cookieOptions,
     });
 
+    // Push diagnostics never expose actual device tokens.
+    const pushTestAttempts = new Map();
+
+    app.get('/api/push/status', requireAuth, (req, res) => {
+        const registeredDevices = store
+            .getPushDevices(req.user.id)
+            .filter(device => device.provider === 'fcm')
+            .length;
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.json({
+            serverEnabled:
+                typeof options.pushSender === 'function',
+            registeredDevices,
+        });
+    });
+
+    app.post('/api/push/test', requireAuth, (req, res) => {
+        const origin = req.get('origin');
+
+        if (
+            origin &&
+            !allowedOrigins.includes(origin) &&
+            !nativeOrigins.has(origin)
+        ) {
+            return res.status(403).json({
+                error: 'Forbidden origin',
+            });
+        }
+
+        if (typeof options.pushSender !== 'function') {
+            return res.status(503).json({
+                error: 'FCM sender is not configured',
+            });
+        }
+
+        const tokens = [
+            ...new Set(
+                store.getPushDevices(req.user.id)
+                    .filter(device => device.provider === 'fcm')
+                    .map(device => device.token)
+            ),
+        ];
+
+        if (tokens.length === 0) {
+            return res.status(409).json({
+                error: 'No registered FCM devices',
+            });
+        }
+
+        const now = Date.now();
+        const previous = pushTestAttempts.get(req.user.id) ?? 0;
+
+        if (now - previous < 30000) {
+            return res.status(429).json({
+                error: 'Retry after 30 seconds',
+            });
+        }
+
+        pushTestAttempts.set(req.user.id, now);
+
+        const delay = options.pushTestDelayMs ?? 8000;
+        const recipientId = req.user.id;
+
+        setTimeout(() => {
+            void Promise.resolve()
+                .then(() => options.pushSender({
+                    tokens,
+                    senderUsername: 'CampLink',
+                    message: {
+                        id: 0,
+                        senderId: 0,
+                        recipientId,
+                        text: 'Проверка Push-уведомлений CampLink',
+                    },
+                }))
+                .then(invalidTokens => {
+                    if (!Array.isArray(invalidTokens)) return;
+
+                    for (const token of invalidTokens) {
+                        if (!tokens.includes(token)) continue;
+                        store.removePushDevice(
+                            recipientId,
+                            'fcm',
+                            token
+                        );
+                    }
+                })
+                .catch(error => {
+                    console.error(
+                        '[FCM] Test notification failed:',
+                        error?.message ?? 'Unknown error'
+                    );
+                });
+        }, delay);
+
+        res.set('Cache-Control', 'no-store');
+
+        return res.status(202).json({
+            scheduledInSeconds: Math.ceil(delay / 1000),
+            deviceCount: tokens.length,
+        });
+    });
+
     app.post('/api/push/devices', requireAuth, (req, res) => {
         const origin = req.get('origin');
 

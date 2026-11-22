@@ -6,6 +6,16 @@ import {
 import type { ThemePreference } from '../services/theme';
 import type { PushStatus } from '../services/push-ios';
 
+export type PushDiagnostics = {
+    serverEnabled: boolean;
+    registeredDevices: number;
+};
+
+export type PushTestResult = {
+    scheduledInSeconds: number;
+    deviceCount: number;
+};
+
 type Props = {
     displayName: string;
     userId: number;
@@ -14,6 +24,8 @@ type Props = {
     nativeIos: boolean;
     pushStatus: PushStatus;
     onEnablePush: () => void;
+    onCheckPush: () => Promise<PushDiagnostics>;
+    onTestPush: () => Promise<PushTestResult>;
     onBack: () => void;
     onLogout: () => Promise<boolean>;
     onCreatePasskey: () => Promise<boolean>;
@@ -44,12 +56,58 @@ export function SettingsPage({
     nativeIos,
     pushStatus,
     onEnablePush,
+    onCheckPush,
+    onTestPush,
     onBack,
     onLogout,
     onCreatePasskey,
 }: Props) {
     const [busy, setBusy] = useState(false);
     const [logoutError, setLogoutError] = useState(false);
+    const [pushChecking, setPushChecking] = useState(false);
+    const [pushTesting, setPushTesting] = useState(false);
+    const [pushReport, setPushReport] =
+        useState<PushDiagnostics | null>(null);
+    const [pushMessage, setPushMessage] = useState('');
+    const [pushError, setPushError] = useState('');
+
+    async function checkPush() {
+        setPushChecking(true);
+        setPushError('');
+        setPushMessage('');
+
+        try {
+            setPushReport(await onCheckPush());
+        } catch {
+            setPushError(
+                'Не удалось проверить Push на сервере'
+            );
+        } finally {
+            setPushChecking(false);
+        }
+    }
+
+    async function testPush() {
+        setPushTesting(true);
+        setPushError('');
+        setPushMessage('');
+
+        try {
+            const result = await onTestPush();
+            setPushMessage(
+                `Тест запланирован через ` +
+                `${result.scheduledInSeconds} сек. ` +
+                `Заблокируйте iPhone прямо сейчас.`
+            );
+        } catch {
+            setPushError(
+                'Тест не запущен. Проверьте подключение ' +
+                'и повторите не раньше чем через 30 секунд.'
+            );
+        } finally {
+            setPushTesting(false);
+        }
+    }
     const [passkeyState, setPasskeyState] =
         useState<'idle' | 'busy' | 'ok' | 'error'>('idle');
 
@@ -297,6 +355,68 @@ export function SettingsPage({
                                 </button>
                             )}
                         </div>
+
+                        {nativeIos && (
+                            <div className="settings-push-tools">
+                                <button
+                                    type="button"
+                                    disabled={pushChecking}
+                                    onClick={() => void checkPush()}
+                                >
+                                    {pushChecking
+                                        ? 'Проверяем…'
+                                        : 'Проверить подключение'}
+                                </button>
+
+                                {pushReport && (
+                                    <div
+                                        className="settings-push-report"
+                                        role="status"
+                                    >
+                                        <span>
+                                            Сервер Firebase:
+                                            {' '}
+                                            {pushReport.serverEnabled
+                                                ? 'включён'
+                                                : 'не настроен'}
+                                        </span>
+                                        <span>
+                                            FCM-устройств:
+                                            {' '}
+                                            {pushReport.registeredDevices}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    disabled={
+                                        pushTesting ||
+                                        pushChecking ||
+                                        pushStatus !== 'registered' ||
+                                        pushReport?.serverEnabled === false ||
+                                        pushReport?.registeredDevices === 0
+                                    }
+                                    onClick={() => void testPush()}
+                                >
+                                    {pushTesting
+                                        ? 'Запускаем…'
+                                        : 'Отправить тестовый Push'}
+                                </button>
+
+                                {pushMessage && (
+                                    <p role="status">{pushMessage}</p>
+                                )}
+                                {pushError && (
+                                    <p
+                                        className="settings-error"
+                                        role="alert"
+                                    >
+                                        {pushError}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

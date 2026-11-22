@@ -10,6 +10,7 @@ import {
 } from 'react';
 import type { Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
+import { App as NativeApp } from '@capacitor/app';
 import { connectToServer } from './services/connection';
 import {
     apiFetch,
@@ -118,7 +119,11 @@ import {
 import {
     decideIncomingNotice,
 } from './services/notification-policy';
-import { SettingsPage } from './components/SettingsPage';
+import {
+    SettingsPage,
+    type PushDiagnostics,
+    type PushTestResult,
+} from './components/SettingsPage';
 import { PasskeySetupPrompt } from './components/PasskeySetupPrompt';
 import {
     listCampLinkPasskeys,
@@ -691,21 +696,78 @@ function App() {
         if (!me || !isNativeIos) return;
 
         let active = true;
+        let syncing = false;
 
-        void restoreIosPushRegistration()
-            .then((registered) => {
-                if (active && registered) {
-                    setPushStatus('registered');
+        async function refreshPushRegistration() {
+            if (!active || syncing) return;
+            syncing = true;
+
+            try {
+                const registered =
+                    await restoreIosPushRegistration();
+
+                if (active) {
+                    setPushStatus(
+                        registered ? 'registered' : 'off'
+                    );
                 }
-            })
-            .catch(() => {
-                if (active) setPushStatus('error');
-            });
+            } catch (error) {
+                console.warn(
+                    '[CampLink] Push sync failed',
+                    error instanceof Error
+                        ? error.message
+                        : 'unknown'
+                );
+
+                if (active) {
+                    setPushStatus('error');
+                }
+            } finally {
+                syncing = false;
+            }
+        }
+
+        void refreshPushRegistration();
+
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                void refreshPushRegistration();
+            }
+        };
+
+        document.addEventListener(
+            'visibilitychange',
+            onVisible
+        );
+
+        const nativeListener = NativeApp.addListener(
+            'appStateChange',
+            ({ isActive }) => {
+                if (isActive) {
+                    void refreshPushRegistration();
+                }
+            }
+        );
+
+        const retryTimer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                void refreshPushRegistration();
+            }
+        }, 60000);
 
         return () => {
             active = false;
+            window.clearInterval(retryTimer);
+            document.removeEventListener(
+                'visibilitychange',
+                onVisible
+            );
+
+            void nativeListener
+                .then(listener => listener.remove())
+                .catch(() => {});
         };
-    }, [me]);
+    }, [me?.id]);
 
     useEffect(() => {
         if (!me || connected) {
@@ -1476,6 +1538,7 @@ function App() {
 
             const viewingSenderChat =
                 message.senderId === selectedPeerRef.current &&
+                document.querySelector('.settings-screen') === null &&
                 document.querySelector(
                     '.messenger.is-mobile.mobile-contacts-open'
                 ) === null;
@@ -3210,6 +3273,30 @@ function App() {
                     nativeIos={isNativeIos}
                     pushStatus={pushStatus}
                     onEnablePush={() => void enableIosPush()}
+                    onCheckPush={async () => {
+                        const response = await apiFetch(
+                            '/api/push/status',
+                            { cache: 'no-store' }
+                        );
+
+                        if (!response.ok) {
+                            throw new Error('Push status unavailable');
+                        }
+
+                        return (await response.json()) as PushDiagnostics;
+                    }}
+                    onTestPush={async () => {
+                        const response = await apiFetch(
+                            '/api/push/test',
+                            { method: 'POST' }
+                        );
+
+                        if (!response.ok) {
+                            throw new Error('Push test unavailable');
+                        }
+
+                        return (await response.json()) as PushTestResult;
+                    }}
                     onBack={() => setSettingsOpen(false)}
                     onLogout={handleLogout}
                     onCreatePasskey={handleCreatePasskey}
@@ -3950,6 +4037,7 @@ function App() {
                     type="button"
                     className="incoming-toast"
                     onClick={() => {
+                        setSettingsOpen(false);
                         selectPeer(toast.peerId);
                         setToast(null);
                     }}
