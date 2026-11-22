@@ -2374,3 +2374,225 @@ body {
         transition: none;
     }
 }
+
+/* Build 4 stage 2: voice recording and playback */
+
+.composer.is-voice-recording .composer-attach {
+    display: none;
+}
+
+.voice-record-bar {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    height: 48px;
+    padding: 6px 11px;
+    border: 1px solid #4d5645;
+    border-radius: 17px;
+    background: #242a25;
+}
+
+.voice-record-dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+    background: #ff6878;
+    box-shadow: 0 0 0 4px rgba(255,104,120,.12);
+    animation: voice-dot-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes voice-dot-pulse {
+    50% {
+        opacity: .45;
+        box-shadow: 0 0 0 6px rgba(255,104,120,.08);
+    }
+}
+
+.voice-record-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    gap: 2px;
+}
+
+.voice-record-main canvas {
+    display: block;
+    width: 100%;
+    height: 24px;
+}
+
+.voice-record-caption {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: #c8d2bb;
+    font-size: 10px;
+    line-height: 12px;
+}
+
+.voice-record-caption time {
+    font-variant-numeric: tabular-nums;
+}
+
+.composer .composer-record-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 7px;
+    align-items: center;
+}
+
+.composer.is-voice-recording .composer-cancel {
+    background: #393e45;
+    color: #ffabb5;
+}
+
+.composer.is-voice-recording .composer-main-action {
+    background: #e8ff72;
+    color: #16200b;
+}
+
+.message.voice-only,
+.message.incoming.voice-only,
+.message.outgoing.voice-only,
+:root[data-theme='light'] .message.incoming.voice-only,
+:root[data-theme='light'] .message.outgoing.voice-only {
+    width: min(300px, 86%);
+    max-width: min(86%, 320px);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+
+.voice-player {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 76px;
+    gap: 10px;
+    padding: 12px 14px 27px;
+    border-radius: 17px;
+    background: #3e4b36;
+}
+
+.message.incoming .voice-player {
+    background: #292c33;
+}
+
+.voice-player audio {
+    display: none;
+}
+
+.voice-player-toggle {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #e8ff72;
+    color: #1b2318;
+}
+
+.voice-player-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.voice-player-progress {
+    width: 100%;
+    min-width: 0;
+    height: 14px;
+    margin: 0;
+    padding: 0;
+    accent-color: #e8ff72;
+    touch-action: pan-x;
+}
+
+.voice-player-time {
+    color: #d3dacd;
+    font-size: 11px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.message.voice-only > small {
+    position: absolute;
+    right: 13px;
+    bottom: 7px;
+    margin: 0;
+    font-size: 10px;
+    pointer-events: none;
+    white-space: nowrap;
+    color: #c5cfbc;
+}
+
+.message.voice-only .media-placeholder {
+    padding: 18px;
+    border-radius: 17px;
+    background: #30353a;
+}
+
+:root[data-theme='light'] .voice-record-bar {
+    border-color: #cfd8c5;
+    background: #f0f4e9;
+}
+
+:root[data-theme='light'] .voice-record-caption {
+    color: #536548;
+}
+
+:root[data-theme='light'] .voice-player {
+    background: #e4efb7;
+}
+
+:root[data-theme='light'] .message.incoming .voice-player {
+    background: #e5eaf1;
+}
+
+:root[data-theme='light'] .voice-player-time,
+:root[data-theme='light'] .message.voice-only > small {
+    color: #526149;
+}
+
+:root[data-theme='light'] .message.incoming .voice-player-time,
+:root[data-theme='light'] .message.incoming.voice-only > small {
+    color: #606b78;
+}
+
+:root[data-theme='light'] .message.voice-only .media-placeholder {
+    background: #e5eaf1;
+}
+
+@media (max-width: 380px) {
+    .voice-record-bar {
+        padding: 5px 8px;
+        gap: 7px;
+    }
+
+    .composer .composer-record-actions {
+        gap: 4px;
+    }
+
+    .voice-player {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .voice-record-dot {
+        animation: none;
+    }
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../services/native-auth';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import type {
     MessageMedia,
 } from '../services/media-types';
@@ -101,21 +102,7 @@ export function MediaBubble({ media }: Props) {
     }
 
     if (media.kind === 'voice') {
-        return (
-            <div
-                className="voice-message"
-                onTouchStart={e => e.stopPropagation()}
-                onTouchEnd={e => e.stopPropagation()}
-                onDoubleClick={e => e.stopPropagation()}
-            >
-                <span>Голосовое сообщение</span>
-                <audio
-                    src={url}
-                    controls
-                    preload="metadata"
-                />
-            </div>
-        );
+        return <VoiceMessagePlayer url={url} />;
     }
 
     return (

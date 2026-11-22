@@ -85,6 +85,7 @@ import {
     clearUnreadCounts,
 } from './services/unread-chats';
 import { MediaBubble } from './components/MediaBubble';
+import { VoiceRecordingBar } from './components/VoiceRecordingBar';
 import {
     readChatList,
     saveChatList,
@@ -2912,7 +2913,7 @@ function App() {
                                         key={key}
                                         className={`message ${
                                             isOutgoing ? 'outgoing' : 'incoming'
-                                        }${isPending ? ' queued' : ''}`}
+                                        }${isPending ? ' queued' : ''}${confirmedMessage?.media?.kind === 'voice' ? ' voice-only' : ''}`}
                                         onTouchStart={event => {
                                             if (confirmedMessage) {
                                                 beginMessageTouch(
@@ -3178,7 +3179,11 @@ function App() {
                         )}
 
                         <form
-                            className="composer"
+                            className={
+                                recordingVoice
+                                    ? 'composer is-voice-recording'
+                                    : 'composer'
+                            }
                             onSubmit={handleSend}
                         >
                             <input
@@ -3298,41 +3303,73 @@ function App() {
                                 )}
                             </div>
 
-                            <textarea
-                                ref={composerInputRef}
-                                value={draft}
-                                onChange={(event) =>
-                                    setDraft(event.target.value)
-                                }
-                                placeholder="Сообщение"
-                                aria-label="Текст сообщения"
-                                rows={1}
-                                enterKeyHint="enter"
-                                maxLength={2000}
-                            />
+                            {recordingVoice && voiceStreamRef.current ? (
+                                <VoiceRecordingBar
+                                    stream={voiceStreamRef.current}
+                                />
+                            ) : (
+                                <textarea
+                                    ref={composerInputRef}
+                                    value={draft}
+                                    onChange={(event) =>
+                                        setDraft(event.target.value)
+                                    }
+                                    placeholder="Сообщение"
+                                    aria-label="Текст сообщения"
+                                    rows={1}
+                                    enterKeyHint="enter"
+                                    maxLength={2000}
+                                />
+                            )}
 
                             {recordingVoice ? (
                                 <div className="composer-record-actions">
                                     <button
                                         type="button"
-                                        className="composer-main-action"
-                                        aria-label="Остановить и отправить запись"
-                                        onClick={() =>
-                                            stopVoiceRecording(false)
-                                        }
-                                    >
-                                        ■
-                                    </button>
-
-                                    <button
-                                        type="button"
                                         className="composer-cancel"
-                                        aria-label="Отменить запись"
+                                        aria-label="Отменить голосовое сообщение"
+                                        title="Удалить запись"
                                         onClick={() =>
                                             stopVoiceRecording(true)
                                         }
                                     >
-                                        ×
+                                        <svg
+                                            viewBox="0 0 24 24"
+                                            width="21"
+                                            height="21"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="1.9"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <path d="M4 7h16M10 4h4M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+                                        </svg>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className="composer-main-action"
+                                        aria-label="Отправить голосовое сообщение"
+                                        title="Отправить запись"
+                                        onClick={() =>
+                                            stopVoiceRecording(false)
+                                        }
+                                    >
+                                        <svg
+                                            viewBox="0 0 24 24"
+                                            width="22"
+                                            height="22"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <path d="m21 3-9.5 18-2.7-7.8L1 10.5 21 3ZM8.8 13.2 21 3" />
+                                        </svg>
                                     </button>
                                 </div>
                             ) : draft.trim() ? (
