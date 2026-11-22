@@ -46,15 +46,19 @@ test(
 
         const bridgeStore = createMailStore(':memory:');
 
-        const akim = main.store.createUser(
-            'akim',
-            'strong-password-123'
-        );
+        const akim = main.store.registerUser({
+            displayName: 'Akim',
+            email: 'akim@example.com',
+            phone: '+79123450011',
+            password: 'strong-password-123',
+        });
 
-        const worker = main.store.createUser(
-            'worker',
-            'strong-password-456'
-        );
+        const worker = main.store.registerUser({
+            displayName: 'Worker',
+            email: 'worker@example.com',
+            phone: '+79123450012',
+            password: 'strong-password-456',
+        });
 
         const relay = createRelayServer({
             store: bridgeStore,
@@ -88,7 +92,7 @@ test(
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    username: 'akim',
+                    username: 'akim@example.com',
                     password: 'strong-password-123',
                 }),
             }

@@ -612,6 +612,7 @@ function App() {
     const edgeTouchRef = useRef<{
         x: number;
         y: number;
+        dragging: boolean;
     } | null>(null);
 
     const lastReadSentRef = useRef<string | null>(null);
@@ -1820,8 +1821,58 @@ function App() {
                 ? {
                     x: touch.clientX,
                     y: touch.clientY,
+                    dragging: false,
                 }
                 : null;
+    }
+
+    function moveEdgeSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        const start = edgeTouchRef.current;
+        const touch = event.touches[0];
+
+        if (!start || !touch) return;
+
+        const dx = touch.clientX - start.x;
+        const dy = touch.clientY - start.y;
+
+        // Leave vertical scrolling untouched.
+        if (
+            !start.dragging &&
+            Math.abs(dy) > 20 &&
+            Math.abs(dy) > Math.abs(dx)
+        ) {
+            edgeTouchRef.current = null;
+            return;
+        }
+
+        if (dx <= 8 || Math.abs(dy) > 45) return;
+
+        start.dragging = true;
+
+        const offset = Math.min(
+            event.currentTarget.clientWidth,
+            Math.max(0, dx)
+        );
+
+        event.currentTarget.style.setProperty(
+            '--camplink-chat-swipe-x',
+            `${offset}px`
+        );
+
+        event.currentTarget.classList.add(
+            'is-edge-swiping'
+        );
+    }
+
+    function clearEdgeSwipe(
+        panel: HTMLElement
+    ) {
+        panel.classList.remove('is-edge-swiping');
+        panel.style.removeProperty(
+            '--camplink-chat-swipe-x'
+        );
     }
 
     function endEdgeSwipe(
@@ -1830,16 +1881,36 @@ function App() {
         const start = edgeTouchRef.current;
         edgeTouchRef.current = null;
 
+        const panel = event.currentTarget;
         const touch = event.changedTouches[0];
 
-        if (!start || !touch) return;
+        if (!start || !touch) {
+            clearEdgeSwipe(panel);
+            return;
+        }
 
         const dx = touch.clientX - start.x;
         const dy = touch.clientY - start.y;
 
         if (isBackSwipe(start.x, dx, dy)) {
+            // Keep the panel at the finger position
+            // until React has committed the route change.
             returnToChats();
+
+            window.requestAnimationFrame(() => {
+                clearEdgeSwipe(panel);
+            });
+        } else {
+            // Not far enough: smoothly return to chat.
+            clearEdgeSwipe(panel);
         }
+    }
+
+    function cancelEdgeSwipe(
+        event: ReactTouchEvent<HTMLElement>
+    ) {
+        edgeTouchRef.current = null;
+        clearEdgeSwipe(event.currentTarget);
     }
 
     function handleMessageScroll() {
@@ -3025,7 +3096,9 @@ function App() {
             <section
                 className="chat"
                 onTouchStartCapture={beginEdgeSwipe}
+                onTouchMoveCapture={moveEdgeSwipe}
                 onTouchEndCapture={endEdgeSwipe}
+                onTouchCancelCapture={cancelEdgeSwipe}
             >
 
                 {(showOfflineBanner || offlinePreview) && (

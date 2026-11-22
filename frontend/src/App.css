@@ -582,10 +582,7 @@ body {
     padding-top: 0;
 }
 
-.messenger.is-mobile.mobile-chat-open .sidebar,
-.messenger.is-mobile.mobile-contacts-open .chat {
-    display: none;
-}
+
 
 .messenger.is-mobile .sidebar-header {
     flex-direction: row;
@@ -3065,5 +3062,116 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .voice-record-holding .voice-gesture-icon {
         transform: none;
+    }
+}
+
+/* Build 4: animated mobile chat navigation */
+
+.messenger.is-mobile {
+    position: relative;
+    isolation: isolate;
+    --camplink-nav-top: env(safe-area-inset-top, 0px);
+    --camplink-nav-bottom: env(safe-area-inset-bottom, 0px);
+    --camplink-nav-duration: 320ms;
+    --camplink-nav-easing:
+        cubic-bezier(.22, 1, .36, 1);
+}
+
+:root.camplink-native-ios .messenger.is-mobile {
+    --camplink-nav-top:
+        max(env(safe-area-inset-top, 0px), 59px);
+    --camplink-nav-bottom:
+        max(env(safe-area-inset-bottom, 0px), 16px);
+}
+
+.messenger.is-mobile .sidebar,
+.messenger.is-mobile .chat {
+    position: absolute;
+    top: var(--camplink-nav-top);
+    bottom: var(--camplink-nav-bottom);
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    will-change: transform;
+}
+
+.messenger.is-mobile .sidebar {
+    z-index: 1;
+    transform: translate3d(0, 0, 0);
+    transition: transform
+        var(--camplink-nav-duration)
+        var(--camplink-nav-easing);
+}
+
+.messenger.is-mobile .chat {
+    z-index: 2;
+    display: flex;
+    transform: translate3d(100%, 0, 0);
+    visibility: hidden;
+    pointer-events: none;
+    box-shadow: -12px 0 28px rgba(0, 0, 0, .17);
+    transition:
+        transform
+            var(--camplink-nav-duration)
+            var(--camplink-nav-easing),
+        visibility 0s linear
+            var(--camplink-nav-duration);
+}
+
+.messenger.is-mobile.mobile-chat-open .sidebar {
+    display: flex;
+    pointer-events: none;
+    transform: translate3d(-12%, 0, 0);
+}
+
+.messenger.is-mobile.mobile-chat-open .chat {
+    display: flex;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate3d(0, 0, 0);
+    transition:
+        transform
+            var(--camplink-nav-duration)
+            var(--camplink-nav-easing),
+        visibility 0s;
+}
+
+.messenger.is-mobile.mobile-contacts-open .sidebar {
+    display: flex;
+    pointer-events: auto;
+    transform: translate3d(0, 0, 0);
+}
+
+.messenger.is-mobile.mobile-contacts-open .chat {
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translate3d(100%, 0, 0);
+}
+
+/* While swiping, the panel tracks the finger. */
+.messenger.is-mobile .chat.is-edge-swiping {
+    transition: none;
+    visibility: visible;
+    transform: translate3d(
+        var(--camplink-chat-swipe-x, 0px),
+        0,
+        0
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .messenger.is-mobile {
+        --camplink-nav-duration: 0ms;
+    }
+
+    .messenger.is-mobile .sidebar,
+    .messenger.is-mobile .chat {
+        transition: none;
+        will-change: auto;
     }
 }
