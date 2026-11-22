@@ -170,6 +170,33 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
     );
   `);
 
+
+    // Build 4: passkeys and one-time WebAuthn challenges.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS passkey_credentials (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            public_key BLOB NOT NULL,
+            counter INTEGER NOT NULL DEFAULT 0,
+            transports TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id)
+                REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_passkeys_user
+            ON passkey_credentials(user_id);
+
+        CREATE TABLE IF NOT EXISTS passkey_challenges (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL
+                CHECK (kind IN ('register', 'login')),
+            user_id INTEGER,
+            challenge TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+        );
+    `);
+
     const messageColumns = db.pragma(
         'table_info(messages)'
     );
@@ -500,6 +527,118 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             }
 
             return publicUser(row);
+        },
+
+        listPasskeys(userId) {
+            return db.prepare(`
+                SELECT id, transports, created_at AS createdAt
+                FROM passkey_credentials
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            `).all(userId).map(row => ({
+                ...row,
+                transports: JSON.parse(row.transports),
+            }));
+        },
+
+        getPasskey(id) {
+            if (typeof id !== 'string') return null;
+
+            const row = db.prepare(`
+                SELECT * FROM passkey_credentials
+                WHERE id = ?
+            `).get(id);
+
+            if (!row) return null;
+
+            return {
+                id: row.id,
+                userId: row.user_id,
+                publicKey: new Uint8Array(row.public_key),
+                counter: row.counter,
+                transports: JSON.parse(row.transports),
+            };
+        },
+
+        addPasskey(userId, credential) {
+            if (this.listPasskeys(userId).length >= 10) {
+                throw new Error('Passkey limit reached');
+            }
+
+            db.prepare(`
+                INSERT INTO passkey_credentials (
+                    id, user_id, public_key,
+                    counter, transports, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            `).run(
+                credential.id,
+                userId,
+                Buffer.from(credential.publicKey),
+                credential.counter,
+                JSON.stringify(credential.transports ?? []),
+                new Date().toISOString()
+            );
+        },
+
+        updatePasskeyCounter(id, counter) {
+            db.prepare(`
+                UPDATE passkey_credentials
+                SET counter = ?
+                WHERE id = ? AND counter <= ?
+            `).run(counter, id, counter);
+        },
+
+        savePasskeyChallenge(record) {
+            db.prepare(`
+                DELETE FROM passkey_challenges
+                WHERE expires_at <= ?
+            `).run(Date.now());
+
+            db.prepare(`
+                INSERT INTO passkey_challenges (
+                    id, kind, user_id, challenge, expires_at
+                ) VALUES (?, ?, ?, ?, ?)
+            `).run(
+                record.id,
+                record.kind,
+                record.userId ?? null,
+                record.challenge,
+                Date.now() + 120000
+            );
+        },
+
+        takePasskeyChallenge(id, kind) {
+            if (
+                typeof id !== 'string' ||
+                !/^[0-9a-f-]{36}$/i.test(id)
+            ) {
+                return null;
+            }
+
+            const take = db.transaction(() => {
+                const row = db.prepare(`
+                    SELECT * FROM passkey_challenges
+                    WHERE id = ? AND kind = ?
+                `).get(id, kind);
+
+                if (!row) return null;
+
+                db.prepare(`
+                    DELETE FROM passkey_challenges
+                    WHERE id = ?
+                `).run(id);
+
+                if (row.expires_at <= Date.now()) {
+                    return null;
+                }
+
+                return {
+                    userId: row.user_id,
+                    challenge: row.challenge,
+                };
+            });
+
+            return take.immediate();
         },
 
         createSession(userId) {

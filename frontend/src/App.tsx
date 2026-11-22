@@ -119,6 +119,10 @@ import {
     decideIncomingNotice,
 } from './services/notification-policy';
 import { SettingsPage } from './components/SettingsPage';
+import {
+    createCampLinkPasskey,
+    loginWithCampLinkPasskey,
+} from './services/passkeys';
 import './App.css';
 
 type User = {
@@ -2240,6 +2244,45 @@ function App() {
         }
     }
 
+    async function handlePasskeyLogin(): Promise<boolean> {
+        setError('');
+
+        try {
+            const result = await loginWithCampLinkPasskey();
+
+            if (isBundledNative()) {
+                await saveNativeSession(
+                    result.token ?? '',
+                    result.expiresInSeconds ?? 0
+                );
+            }
+
+            setRegisterMode(false);
+            saveOfflineUser(result.user);
+            setOfflinePreview(false);
+            setMe(result.user);
+            return true;
+        } catch {
+            setError(
+                'Не удалось войти по ключу доступа. ' +
+                'Попробуйте вход с паролем.'
+            );
+            return false;
+        }
+    }
+
+    async function handleCreatePasskey(): Promise<boolean> {
+        setError('');
+
+        try {
+            await createCampLinkPasskey();
+            return true;
+        } catch {
+            setError('Не удалось создать ключ доступа');
+            return false;
+        }
+    }
+
     async function handleLogout(): Promise<boolean> {
         try {
             await apiPost('/api/auth/logout', {});
@@ -2910,6 +2953,7 @@ function App() {
                         <LoginForm
                             error={error}
                             onSubmit={handleLogin}
+                            onPasskeyLogin={handlePasskeyLogin}
                             onRegister={() => {
                                 setError('');
                                 setRegisterMode(true);
@@ -3080,6 +3124,7 @@ function App() {
                     onEnablePush={() => void enableIosPush()}
                     onBack={() => setSettingsOpen(false)}
                     onLogout={handleLogout}
+                    onCreatePasskey={handleCreatePasskey}
                 />
             )}
 

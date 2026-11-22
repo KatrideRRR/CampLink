@@ -4,6 +4,7 @@ import {
     timingSafeEqual,
 } from 'node:crypto';
 import express from 'express';
+import { mountPasskeyRoutes } from './passkeys.js';
 import {
     normalizeLoginIdentifier,
 } from './login-identifier.js';
@@ -94,6 +95,9 @@ export function createAppServer(options = {}) {
 
     app.disable('x-powered-by');
     app.set('trust proxy', 'loopback');
+    app.use('/api/passkeys', express.json({
+        limit: '32kb',
+    }));
     app.use(express.json({ limit: '8kb' }));
 
     const httpServer = createServer(app);
@@ -572,6 +576,16 @@ export function createAppServer(options = {}) {
 
     app.get('/api/auth/me', requireAuth, (req, res) => {
         res.json({ user: req.user });
+    });
+
+    mountPasskeyRoutes({
+        app,
+        store,
+        requireAuth,
+        nativeOrigins,
+        sessionAge: SESSION_AGE,
+        cookieName: COOKIE_NAME,
+        cookieOptions,
     });
 
     app.post('/api/push/devices', requireAuth, (req, res) => {

@@ -12,6 +12,7 @@ type Props = {
     onEnablePush: () => void;
     onBack: () => void;
     onLogout: () => Promise<boolean>;
+    onCreatePasskey: () => Promise<boolean>;
 };
 
 const themes: {
@@ -41,9 +42,24 @@ export function SettingsPage({
     onEnablePush,
     onBack,
     onLogout,
+    onCreatePasskey,
 }: Props) {
     const [busy, setBusy] = useState(false);
     const [logoutError, setLogoutError] = useState(false);
+    const [passkeyState, setPasskeyState] =
+        useState<'idle' | 'busy' | 'ok' | 'error'>('idle');
+
+    async function addPasskey() {
+        if (passkeyState === 'busy') return;
+        setPasskeyState('busy');
+
+        try {
+            const success = await onCreatePasskey();
+            setPasskeyState(success ? 'ok' : 'error');
+        } catch {
+            setPasskeyState('error');
+        }
+    }
 
     async function logout() {
         if (busy) return;
@@ -140,6 +156,43 @@ export function SettingsPage({
                                 </button>
                             ))}
                         </div>
+                    </div>
+                </div>
+
+                <div className="settings-group">
+                    <h2>Безопасность</h2>
+                    <div className="settings-card">
+                        <div className="settings-row">
+                            <div>
+                                <strong>Ключ доступа</strong>
+                                <p>
+                                    Вход по Face ID, отпечатку
+                                    или коду устройства без пароля
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            className="settings-passkey-button"
+                            disabled={passkeyState === 'busy'}
+                            onClick={() => void addPasskey()}
+                        >
+                            {passkeyState === 'busy'
+                                ? 'Создаём ключ…'
+                                : 'Добавить ключ доступа'}
+                        </button>
+                        {passkeyState === 'ok' && (
+                            <p role="status" className="settings-passkey-ok">
+                                Ключ доступа сохранён
+                            </p>
+                        )}
+                        {passkeyState === 'error' && (
+                            <p role="alert" className="settings-error">
+                                Не удалось создать ключ.
+                                Проверьте поддержку устройства
+                                и привязку домена.
+                            </p>
+                        )}
                     </div>
                 </div>
 

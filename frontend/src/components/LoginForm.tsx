@@ -1,4 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import {
+    useEffect,
+    useState,
+    type FormEvent,
+} from 'react';
+import { passkeysAvailable } from '../services/passkeys';
 import PhoneInput, {
     isValidPhoneNumber,
     type Value,
@@ -16,12 +21,14 @@ type Props = {
     error: string;
     onSubmit: (credentials: LoginCredentials) => Promise<boolean>;
     onRegister: () => void;
+    onPasskeyLogin: () => Promise<boolean>;
 };
 
 export function LoginForm({
     error,
     onSubmit,
     onRegister,
+    onPasskeyLogin,
 }: Props) {
     const [mode, setMode] = useState<'phone' | 'email'>('phone');
     const [phone, setPhone] = useState<Value>();
@@ -29,6 +36,30 @@ export function LoginForm({
     const [password, setPassword] = useState('');
     const [busy, setBusy] = useState(false);
     const [localError, setLocalError] = useState('');
+    const [passkeyReady, setPasskeyReady] = useState(false);
+    const [passkeyBusy, setPasskeyBusy] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        void passkeysAvailable().then(available => {
+            if (active) setPasskeyReady(available);
+        });
+        return () => { active = false; };
+    }, []);
+
+    async function passkeyLogin() {
+        if (passkeyBusy) return;
+        setPasskeyBusy(true);
+        setLocalError('');
+
+        try {
+            await onPasskeyLogin();
+        } catch {
+            setLocalError('Не удалось войти по ключу доступа');
+        } finally {
+            setPasskeyBusy(false);
+        }
+    }
 
     function switchMode(next: 'phone' | 'email') {
         setMode(next);
@@ -164,6 +195,19 @@ export function LoginForm({
                     {busy ? 'Входим…' : 'Войти'}
                 </button>
             </form>
+
+            {passkeyReady && (
+                <button
+                    type="button"
+                    className="passkey-action"
+                    disabled={passkeyBusy}
+                    onClick={() => void passkeyLogin()}
+                >
+                    {passkeyBusy
+                        ? 'Подтверждаем…'
+                        : 'Войти по лицу, отпечатку или ключу'}
+                </button>
+            )}
 
             <button
                 type="button"
