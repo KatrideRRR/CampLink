@@ -10,7 +10,12 @@ test('native session and websocket authentication', {
         databasePath: ':memory:',
     });
 
-    store.createUser('akim', 'test-password-123');
+    store.registerUser({
+        displayName: 'Akim',
+        email: 'akim@example.com',
+        phone: '+79123450001',
+        password: 'test-password-123',
+    });
 
     await new Promise((resolve, reject) => {
         httpServer.once('error', reject);
@@ -60,7 +65,7 @@ test('native session and websocket authentication', {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                username: 'akim',
+                username: 'akim@example.com',
                 password: 'test-password-123',
             }),
         }
@@ -72,7 +77,7 @@ test('native session and websocket authentication', {
     const data = await login.json();
 
     assert.match(data.token, /^[a-f0-9]{64}$/);
-    assert.equal(data.user.username, 'akim');
+    assert.equal(data.user.displayName, 'Akim');
 
     const headers = {
         Origin: origin,

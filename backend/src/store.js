@@ -455,7 +455,7 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             return publicUser(row);
         },
 
-        verifyCredentials(username, password) {
+        verifyCredentials(username, password, options = {}) {
             if (
                 typeof username !== 'string' ||
                 typeof password !== 'string'
@@ -466,17 +466,21 @@ export function createStore(databasePath = DEFAULT_DB_PATH) {
             const identifier =
                 username.trim().toLowerCase();
 
-            const row = db.prepare(`
-                SELECT * FROM users
-                WHERE username = ?
-                   OR email = ?
-                   OR phone = ?
-                LIMIT 1
-            `).get(
-                identifier,
-                identifier,
-                normalizePhone(identifier)
-            );
+            const phone = normalizePhone(identifier);
+
+            const row = options.emailOrPhoneOnly
+                ? db.prepare(`
+                    SELECT * FROM users
+                    WHERE email = ? OR phone = ?
+                    LIMIT 1
+                `).get(identifier, phone)
+                : db.prepare(`
+                    SELECT * FROM users
+                    WHERE username = ?
+                       OR email = ?
+                       OR phone = ?
+                    LIMIT 1
+                `).get(identifier, identifier, phone);
 
             if (!row) return null;
 

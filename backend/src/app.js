@@ -5,6 +5,9 @@ import {
 } from 'node:crypto';
 import express from 'express';
 import {
+    normalizeLoginIdentifier,
+} from './login-identifier.js';
+import {
     validateRegistration,
 } from './registration.js';
 import {
@@ -500,13 +503,12 @@ export function createAppServer(options = {}) {
                 error: 'Forbidden origin',
             });
         }
-        const username =
-            typeof req.body?.username === 'string'
-                ? req.body.username.trim().toLowerCase()
-                : '';
+        const username = normalizeLoginIdentifier(
+            req.body?.username
+        );
 
         const password = req.body?.password;
-        const key = `${req.ip}:${username}`;
+        const key = `${req.ip}:${username ?? 'invalid'}`;
 
         const now = Date.now();
         const previous = loginAttempts.get(key);
@@ -523,10 +525,13 @@ export function createAppServer(options = {}) {
             });
         }
 
-        const user = store.verifyCredentials(
-            username,
-            password
-        );
+        const user = username
+            ? store.verifyCredentials(
+                username,
+                password,
+                { emailOrPhoneOnly: true }
+            )
+            : null;
 
         if (!user) {
             const current = loginAttempts.get(key) || {

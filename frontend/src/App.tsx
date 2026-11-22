@@ -86,6 +86,10 @@ import {
     clearUnreadCounts,
 } from './services/unread-chats';
 import { MediaBubble } from './components/MediaBubble';
+import {
+    LoginForm,
+    type LoginCredentials,
+} from './components/LoginForm';
 import { VoiceRecordingBar } from './components/VoiceRecordingBar';
 import {
     classifyVoiceGesture,
@@ -307,10 +311,8 @@ function App() {
         };
     }, [me]);
 
-    const [username, setUsername] = useState('');
     const [registerMode, setRegisterMode] =
         useState(false);
-    const [password, setPassword] = useState('');
 
     const [peers, setPeers] = useState<ChatPeer[]>([]);
 
@@ -2094,31 +2096,53 @@ function App() {
             }
         }
 
-        setUsername('');
-        setPassword('');
         setRegisterMode(false);
         saveOfflineUser(result.user);
         setOfflinePreview(false);
         setMe(result.user);
     }
 
-    async function handleLogin(event: FormEvent) {
-        event.preventDefault();
+    async function handleLogin({
+        identifier,
+        password,
+    }: LoginCredentials): Promise<boolean> {
         setError('');
 
         try {
             const native = isBundledNative();
 
-            const result = await apiPost<{
-                user: User;
-                token?: string;
-                expiresInSeconds?: number;
-            }>(
+            const response = await apiFetch(
                 native
                     ? '/api/auth/native-login'
                     : '/api/auth/login',
-                { username, password }
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: identifier,
+                        password,
+                    }),
+                }
             );
+
+            if (!response.ok) {
+                setError(
+                    response.status === 429
+                        ? 'Слишком много попыток. Попробуйте позже.'
+                        : response.status >= 500
+                            ? 'Сервер временно недоступен'
+                            : 'Неверный email, телефон или пароль'
+                );
+                return false;
+            }
+
+            const result = await response.json() as {
+                user: User;
+                token?: string;
+                expiresInSeconds?: number;
+            };
 
             if (native) {
                 try {
@@ -2127,20 +2151,21 @@ function App() {
                         result.expiresInSeconds ?? 0
                     );
                 } catch {
-                    setError(
-                        'Не удалось сохранить защищённую сессию'
-                    );
-                    return;
+                    setError('Не удалось сохранить защищённую сессию');
+                    return false;
                 }
             }
 
             setRegisterMode(false);
-            setPassword('');
             saveOfflineUser(result.user);
             setOfflinePreview(false);
             setMe(result.user);
+            return true;
         } catch {
-            setError('Неверный логин или пароль');
+            setError(
+                'Нет соединения с сервером. Попробуйте ещё раз.'
+            );
+            return false;
         }
     }
 
@@ -2172,8 +2197,6 @@ function App() {
         socketRef.current?.disconnect();
         selectedPeerRef.current = null;
         setRegisterMode(false);
-        setUsername('');
-        setPassword('');
         setMe(null);
         setPeers([]);
         setSelectedPeerId(null);
@@ -2612,6 +2635,10 @@ function App() {
         setVoiceGestureHint('holding');
         setMediaMenuOpen(false);
 
+        const form = event.currentTarget.closest('form');
+        form?.style.setProperty('--voice-lift', '0');
+        form?.style.setProperty('--voice-cancel-progress', '0');
+
         // Capture on the stable form, not the microphone button:
         // the microphone disappears when recording starts.
         try {
@@ -2633,6 +2660,24 @@ function App() {
         if (!gesture || gesture.pointerId !== event.pointerId) {
             return;
         }
+
+        const lift = Math.min(
+            1,
+            Math.max(0, (gesture.startY - event.clientY) / 65)
+        );
+        const cancel = Math.min(
+            1,
+            Math.max(0, (gesture.startX - event.clientX) / 85)
+        );
+
+        event.currentTarget.style.setProperty(
+            '--voice-lift',
+            String(lift)
+        );
+        event.currentTarget.style.setProperty(
+            '--voice-cancel-progress',
+            String(cancel)
+        );
 
         setVoiceGestureHint(
             previewVoiceGesture({
@@ -2791,49 +2836,14 @@ function App() {
                             }}
                         />
                     ) : (
-                        <>
-                            <form onSubmit={handleLogin}>
-                                <input
-                                    value={username}
-                                    onChange={event =>
-                                        setUsername(event.target.value)
-                                    }
-                                    placeholder="Никнейм, email или телефон"
-                                    autoComplete="username"
-                                    required
-                                />
-
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={event =>
-                                        setPassword(event.target.value)
-                                    }
-                                    placeholder="Пароль"
-                                    autoComplete="current-password"
-                                    required
-                                />
-
-                                <button type="submit">
-                                    Войти
-                                </button>
-                            </form>
-
-                            {error && (
-                                <p className="error">{error}</p>
-                            )}
-
-                            <button
-                                type="button"
-                                className="registration-back"
-                                onClick={() => {
-                                    setError('');
-                                    setRegisterMode(true);
-                                }}
-                            >
-                                Создать аккаунт
-                            </button>
-                        </>
+                        <LoginForm
+                            error={error}
+                            onSubmit={handleLogin}
+                            onRegister={() => {
+                                setError('');
+                                setRegisterMode(true);
+                            }}
+                        />
                     )}
                 </div>
             </main>
@@ -3522,6 +3532,11 @@ function App() {
                             {recordingVoice && voiceStreamRef.current ? (
                                 <VoiceRecordingBar
                                     stream={voiceStreamRef.current}
+                                    gesture={
+                                        voiceLocked
+                                            ? 'locked'
+                                            : voiceGestureHint
+                                    }
                                     hint={
                                         voiceLocked
                                             ? 'Запись закреплена'

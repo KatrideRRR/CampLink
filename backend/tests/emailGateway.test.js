@@ -16,15 +16,19 @@ test(
             emailGatewaySecret: SECRET,
         });
 
-        const akim = store.createUser(
-            'akim',
-            'strong-test-password-123'
-        );
+        const akim = store.registerUser({
+                displayName: 'Akim',
+                email: 'akim@example.com',
+                phone: '+79123450001',
+                password: 'strong-test-password-123',
+            });
 
-        const worker = store.createUser(
-            'worker',
-            'strong-test-password-456'
-        );
+        const worker = store.registerUser({
+                displayName: 'Worker',
+                email: 'worker@example.com',
+                phone: '+79123450002',
+                password: 'strong-test-password-456',
+            });
 
         await new Promise((resolve, reject) => {
             httpServer.once('error', reject);
@@ -90,7 +94,7 @@ test(
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    username: 'worker',
+                    username: 'worker@example.com',
                     password: 'strong-test-password-456',
                 }),
             }

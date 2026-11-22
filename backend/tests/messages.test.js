@@ -10,20 +10,26 @@ test('authenticated private messaging', { timeout: 10000 }, async (t) => {
         databasePath: ':memory:',
     });
 
-    const akim = store.createUser(
-        'akim',
-        'test-password-123'
-    );
+    const akim = store.registerUser({
+        displayName: 'Akim',
+        email: 'akim@example.com',
+        phone: '+79123450001',
+        password: 'test-password-123',
+    });
 
-    const worker = store.createUser(
-        'worker',
-        'test-password-456'
-    );
+    const worker = store.registerUser({
+        displayName: 'Worker',
+        email: 'worker@example.com',
+        phone: '+79123450002',
+        password: 'test-password-456',
+    });
 
-    const outsider = store.createUser(
-        'outsider',
-        'test-password-789'
-    );
+    const outsider = store.registerUser({
+        displayName: 'Outsider',
+        email: 'outsider@example.com',
+        phone: '+79123450003',
+        password: 'test-password-789',
+    });
 
     const clients = [];
 
@@ -119,7 +125,7 @@ test('authenticated private messaging', { timeout: 10000 }, async (t) => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                username: 'akim',
+                username: 'akim@example.com',
                 password: 'incorrect-password',
             }),
         }
@@ -128,17 +134,17 @@ test('authenticated private messaging', { timeout: 10000 }, async (t) => {
     assert.equal(invalidLogin.status, 401);
 
     const akimCookie = await login(
-        'akim',
+        'akim@example.com',
         'test-password-123'
     );
 
     const workerCookie = await login(
-        'worker',
+        'worker@example.com',
         'test-password-456'
     );
 
     const outsiderCookie = await login(
-        'outsider',
+        'outsider@example.com',
         'test-password-789'
     );
 

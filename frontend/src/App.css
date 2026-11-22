@@ -2777,3 +2777,293 @@ body {
         transition: none;
     }
 }
+
+/* Build 4: animated voice gesture feedback */
+
+.voice-record-bar {
+    transition:
+        background-color 180ms ease,
+        border-color 180ms ease,
+        box-shadow 180ms ease,
+        transform 180ms ease;
+    animation: voice-panel-enter 210ms ease-out both;
+}
+
+@keyframes voice-panel-enter {
+    from {
+        opacity: .35;
+        transform: translateY(9px) scale(.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.voice-gesture-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 25px;
+    width: 25px;
+    height: 30px;
+    color: #b9caad;
+    opacity: .65;
+    transition:
+        color 170ms ease,
+        opacity 170ms ease,
+        transform 170ms cubic-bezier(.2,.8,.2,1);
+}
+
+.voice-gesture-icon svg {
+    width: 23px;
+    height: 23px;
+}
+
+.voice-record-lock {
+    border-color: #d5ed78;
+    background: #34402b;
+    box-shadow: 0 0 0 2px rgba(232,255,114,.11);
+}
+
+.voice-record-lock .voice-gesture-icon {
+    transform: translateY(-6px) scale(1.2);
+    opacity: 1;
+    color: #e8ff72;
+}
+
+.voice-record-cancel {
+    border-color: #df7582;
+    background: #412b32;
+}
+
+.voice-record-cancel .voice-gesture-icon {
+    transform: translateX(-6px) rotate(-9deg) scale(1.15);
+    opacity: 1;
+    color: #ff9da9;
+}
+
+.voice-record-locked {
+    border-color: #c5e76e;
+    background: #303f29;
+}
+
+.voice-record-locked .voice-gesture-icon {
+    color: #e8ff72;
+    opacity: 1;
+    animation: voice-lock-pop 320ms ease-out;
+}
+
+@keyframes voice-lock-pop {
+    0%   { transform: scale(.65); }
+    65%  { transform: scale(1.25); }
+    100% { transform: scale(1); }
+}
+
+.voice-record-caption > span {
+    transition: color 170ms ease;
+}
+
+.voice-record-lock .voice-record-caption > span,
+.voice-record-locked .voice-record-caption > span {
+    color: #e8ff72;
+}
+
+.voice-record-cancel .voice-record-caption > span {
+    color: #ffacb4;
+}
+
+:root[data-theme='light'] .voice-record-lock,
+:root[data-theme='light'] .voice-record-locked {
+    background: #e6f2c9;
+    border-color: #93b54e;
+}
+
+:root[data-theme='light'] .voice-record-cancel {
+    background: #fff0f0;
+    border-color: #de8290;
+}
+
+:root[data-theme='light'] .voice-record-lock .voice-gesture-icon,
+:root[data-theme='light'] .voice-record-locked .voice-gesture-icon {
+    color: #587b16;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .voice-record-bar,
+    .voice-gesture-icon,
+    .voice-record-caption > span {
+        transition: none;
+        animation: none;
+    }
+}
+
+/* Build 4 stage 5: mobile login and international phone */
+
+.login-page {
+    position: relative;
+    top: var(--camplink-viewport-top, 0px);
+    width: 100%;
+    height: var(--camplink-viewport-height, 100dvh);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+
+    padding:
+        max(20px, env(safe-area-inset-top, 0px))
+        16px
+        max(30px, env(safe-area-inset-bottom, 0px));
+
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 32px;
+}
+
+.login-page .login-card {
+    box-sizing: border-box;
+    flex-shrink: 0;
+    width: min(100%, 380px);
+    margin: auto 0;
+    padding: 34px 24px;
+}
+
+.login-card .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    margin-top: 20px;
+}
+
+.login-form input {
+    width: 100%;
+    font-size: 16px;
+    min-height: 48px;
+}
+
+.login-mode {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    width: 100%;
+    padding: 4px;
+    border-radius: 13px;
+    background: #292e35;
+}
+
+.login-card .login-form .login-mode button {
+    min-height: 40px;
+    padding: 8px 10px;
+    background: transparent;
+    color: #bfc7d1;
+    border-radius: 10px;
+    font-size: 14px;
+}
+
+.login-card .login-form .login-mode button.selected {
+    background: #e8ff72;
+    color: #172014;
+}
+
+.login-card .login-form .login-phone {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 49px;
+    gap: 10px;
+    padding: 0 13px;
+    border: 1px solid #393c44;
+    border-radius: 12px;
+    background: #26282e;
+    color: #fff;
+}
+
+.login-form .login-phone .PhoneInputCountry {
+    flex-shrink: 0;
+    margin-right: 0;
+}
+
+.login-form .login-phone .PhoneInputCountryIcon {
+    width: 26px;
+    height: 18px;
+}
+
+.login-form .login-phone .PhoneInputInput {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 12px 0;
+    border: 0;
+    border-radius: 0;
+    outline: none;
+    background: transparent;
+    color: inherit;
+    font-size: 16px;
+}
+
+.login-form .login-phone:focus-within {
+    border-color: #e8ff72;
+}
+
+:root[data-theme='light'] .login-mode {
+    background: #e9edf3;
+}
+
+:root[data-theme='light']
+.login-card .login-form .login-mode button {
+    color: #596472;
+}
+
+:root[data-theme='light']
+.login-card .login-form .login-mode button.selected {
+    background: #dcefa5;
+    color: #273514;
+}
+
+:root[data-theme='light']
+.login-card .login-form .login-phone {
+    background: #f4f6f9;
+    border-color: #cdd4dc;
+    color: #181b20;
+}
+
+:root[data-theme='light']
+.login-form .login-phone .PhoneInputInput {
+    background: transparent;
+    color: #181b20;
+}
+
+@media (max-height: 650px) {
+    .login-page .login-card {
+        padding-top: 26px;
+        padding-bottom: 26px;
+    }
+
+    .login-card h1 {
+        font-size: 27px;
+    }
+}
+
+@media (max-width: 360px) {
+    .login-page .login-card {
+        padding-left: 18px;
+        padding-right: 18px;
+    }
+}
+
+/* Continuous feedback while dragging the microphone */
+
+.voice-record-holding .voice-gesture-icon {
+    transform:
+        translateY(calc(var(--voice-lift, 0) * -8px))
+        translateX(calc(var(--voice-cancel-progress, 0) * -6px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .voice-record-holding .voice-gesture-icon {
+        transform: none;
+    }
+}

@@ -13,15 +13,19 @@ test('APNs devices: auth, validation, ownership and logout',
             store.close();
         });
 
-        const alice = store.createUser(
-            'alice',
-            'test-password-123'
-        );
+        const alice = store.registerUser({
+                displayName: 'Alice',
+                email: 'alice@example.com',
+                phone: '+79123450004',
+                password: 'test-password-123',
+            });
 
-        const bob = store.createUser(
-            'bob',
-            'test-password-456'
-        );
+        const bob = store.registerUser({
+                displayName: 'Bob',
+                email: 'bob@example.com',
+                phone: '+79123450005',
+                password: 'test-password-456',
+            });
 
         await new Promise((resolve, reject) => {
             httpServer.once('error', reject);
@@ -54,12 +58,12 @@ test('APNs devices: auth, validation, ownership and logout',
         }
 
         const aCookie = await login(
-            'alice',
+            'alice@example.com',
             'test-password-123'
         );
 
         const bCookie = await login(
-            'bob',
+            'bob@example.com',
             'test-password-456'
         );
 

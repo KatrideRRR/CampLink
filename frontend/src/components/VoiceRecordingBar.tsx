@@ -7,11 +7,13 @@ import {
 type Props = {
     stream: MediaStream;
     hint: string;
+    gesture: 'holding' | 'lock' | 'cancel' | 'locked';
 };
 
 export function VoiceRecordingBar({
     stream,
     hint,
+    gesture,
 }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [seconds, setSeconds] = useState(0);
@@ -139,7 +141,7 @@ export function VoiceRecordingBar({
 
     return (
         <div
-            className="voice-record-bar"
+            className={`voice-record-bar voice-record-${gesture}`}
             role="group"
             aria-label="Идёт запись голосового сообщения"
         >
@@ -157,6 +159,32 @@ export function VoiceRecordingBar({
                     <time>{formatVoiceTime(seconds)}</time>
                 </span>
             </div>
+            <span
+                className="voice-gesture-icon"
+                aria-hidden="true"
+            >
+                {gesture === 'cancel' ? (
+                    <svg viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 7h16M10 4h4M7 7l1 13h8l1-13" />
+                    </svg>
+                ) : (
+                    <svg viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round">
+                        {gesture === 'locked' ? (
+                            <>
+                                <rect x="5" y="10" width="14"
+                                      height="11" rx="2" />
+                                <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                            </>
+                        ) : (
+                            <path d="m12 20 0-15m-6 6 6-6 6 6" />
+                        )}
+                    </svg>
+                )}
+            </span>
         </div>
     );
 }
